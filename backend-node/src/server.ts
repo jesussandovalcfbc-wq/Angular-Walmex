@@ -35,6 +35,10 @@ async function initData() {
 // Start loading in the background
 initData();
 
+app.get('/api/health', (_req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 app.get('/api/dashboard-data', (req, res) => {
   if (!GLOBAL_DATA) {
     return res.status(503).json({ error: 'Data is still loading. Please try again later.' });
