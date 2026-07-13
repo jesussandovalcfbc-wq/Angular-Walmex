@@ -26,7 +26,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     const loaderTxt = document.querySelector('.ld-txt');
     if (loaderTxt) loaderTxt.innerHTML = 'Conectando...';
 
-    const API_URL = 'http://localhost:8000/api';
+    const API_URL = 'https://walmex-api.onrender.com/api';
 
     forkJoin({
       dashboard:    this.http.get(`${API_URL}/dashboard-data`),
@@ -121,7 +121,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     reader.readAsDataURL(this.selectedFile);
     reader.onload = () => {
       const base64Content = (reader.result as string).split(',')[1];
-      this.http.post('http://localhost:8000/api/upload-excel', {
+      this.http.post('https://walmex-api.onrender.com/api/upload-excel', {
         content: base64Content,
         fileName: this.selectedFile?.name
       }).subscribe({
