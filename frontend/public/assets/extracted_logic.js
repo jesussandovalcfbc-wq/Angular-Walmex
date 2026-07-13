@@ -21,6 +21,7 @@ try {
 } catch(e) {}
 
 var SUPABASE_UI_ROW_ID = 'choferes_ui_state';
+var UI_STATE_READY = false;
 
 window.saveChecks = function() {
     try {
@@ -32,8 +33,14 @@ window.saveChecks = function() {
         localStorage.setItem('notesWalmart', JSON.stringify(notesWalmart));
     } catch (e) {}
     
+    // Never overwrite the shared state before its current value has loaded.
+    if (!UI_STATE_READY) {
+        console.warn('UI state is still loading; Supabase save was skipped.');
+        return;
+    }
+
     // Sync to Supabase
-    if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+    if (_supabaseConfigured()) {
         var payload = {
             checkedCFBC: [...checkedCFBC],
             checkedWalmart: [...checkedWalmart],
@@ -60,14 +67,18 @@ window.saveChecks = function() {
 };
 
 window.loadUIStateFromSupabase = function() {
-    if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
-        fetch(SUPABASE_URL + '/rest/v1/walmex_resumen_captura?id=eq.' + encodeURIComponent(SUPABASE_UI_ROW_ID) + '&select=data', {
+    if (!_supabaseConfigured()) return Promise.resolve(false);
+
+    return fetch(SUPABASE_URL + '/rest/v1/walmex_resumen_captura?id=eq.' + encodeURIComponent(SUPABASE_UI_ROW_ID) + '&select=data', {
             headers: {
                 'apikey': SUPABASE_KEY,
                 'Authorization': 'Bearer ' + SUPABASE_KEY
             }
         })
-        .then(function(res) { return res.ok ? res.json() : []; })
+        .then(function(res) {
+            if (!res.ok) throw new Error('Supabase UI state request failed with status ' + res.status);
+            return res.json();
+        })
         .then(function(rows) {
             if (rows && rows[0] && rows[0].data) {
                 var d = rows[0].data;
@@ -93,13 +104,15 @@ window.loadUIStateFromSupabase = function() {
                     renderChoferes();
                 }
             }
+            UI_STATE_READY = true;
+            return true;
         })
-        .catch(function(e) { console.error("Error loading UI state from Supabase", e); });
-    }
+        .catch(function(e) {
+            UI_STATE_READY = false;
+            console.error("Error loading UI state from Supabase", e);
+            return false;
+        });
 };
-
-// Initiate load right away
-setTimeout(window.loadUIStateFromSupabase, 500);
 
 window.toggleFlag = function(btn, key, source) {
     var row = btn.closest('tr');
@@ -6095,18 +6108,22 @@ window.initWalmexJS = function(dashboardData, supabaseData, devolucionesData, su
     var loader = document.getElementById('loader');
     var loaderTxt = loader ? loader.querySelector('.ld-txt') : null;
     
-    try {
-        if (typeof window.init === 'function') {
-            window.init();
+    var startApp = function() {
+        try {
+            if (typeof window.init === 'function') {
+                window.init();
+            }
+        } catch (e) {
+            if (loaderTxt) {
+                loaderTxt.innerHTML = 'Error JS en init(): ' + e.message;
+            }
+            return;
         }
-    } catch (e) {
-        if (loaderTxt) {
-            loaderTxt.innerHTML = 'Error JS en init(): ' + e.message;
-        }
-        return;
-    }
-    
-    if (loader) loader.style.display = 'none';
-    var app = document.getElementById('app');
-    if (app) app.style.display = 'block';
+
+        if (loader) loader.style.display = 'none';
+        var app = document.getElementById('app');
+        if (app) app.style.display = 'block';
+    };
+
+    Promise.resolve(window.loadUIStateFromSupabase()).then(startApp, startApp);
 };
