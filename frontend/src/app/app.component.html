@@ -1,0 +1,477 @@
+<!-- Carga de datos movida a la cabecera -->
+
+<!-- Ventana emergente (Modal) para Comentarios -->
+<div id="commentOverlay" onclick="closeCommentModal()"></div>
+<div id="commentModal">
+<h3>Comentario</h3>
+<textarea id="txtComment" placeholder="Escribe un comentario o nota..."></textarea>
+<div class="actions">
+<button id="btnDelComment" onclick="deleteComment()">Borrar</button>
+<button id="btnCancelComment" onclick="closeCommentModal()">Cancelar</button>
+<button id="btnSaveComment" onclick="saveComment()">Guardar</button>
+</div>
+</div>
+<div id="loader">
+  <div class="loader-content">
+    <div class="loader-logo">
+      <span class="wm-text" style="color: white; font-size: 2.2rem; margin-right: 4px;">WALMEX</span>
+    </div>
+    <div class="spinner-container">
+      <div class="premium-spinner"></div>
+    </div>
+    <div class="ld-txt">Conectando...</div>
+  </div>
+</div>
+<div id="app" style="display:none; padding-top: var(--global-header-height, 75px);">
+<div class="global-sticky-header" style="position: fixed; top: 0; left: 0; width: 100%; z-index: 6000; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+<div class="hdr">
+<div style="margin-top:12px; display:flex; gap:8px;">
+<button id="btnProd" onclick="setView('producto')" style="padding:6px 12px; background:#6A4B59; color:white; border:1px solid #4A3540; border-bottom:3px solid #4A3540; border-radius:4px; cursor:pointer; font-weight:600;">Proyección</button>
+<button id="btnTiend" onclick="setView('tienda')" style="padding:6px 12px; background:#A08A95; color:white; border:1px solid #806A75; border-bottom:3px solid #806A75; border-radius:4px; cursor:pointer; font-weight:600;">Tienda</button>
+<button id="btnComp" onclick="setView('comparativo')" style="padding:6px 12px; background:#A08A95; color:white; border:1px solid #806A75; border-bottom:3px solid #806A75; border-radius:4px; cursor:pointer; font-weight:600;">Comparativo</button>
+<button id="btnInv" onclick="setView('inventario')" style="padding:6px 12px; background:#A08A95; color:white; border:1px solid #806A75; border-bottom:3px solid #806A75; border-radius:4px; cursor:pointer; font-weight:600;">Inventario Actual</button>
+<button id="btnGasto" onclick="setView('gasto')" style="padding:6px 12px; background:#A08A95; color:white; border:1px solid #806A75; border-bottom:3px solid #806A75; border-radius:4px; cursor:pointer; font-weight:600;">Gasto</button>
+<button id="btnResumen" onclick="setView('resumen')" style="padding:6px 12px; background:#A08A95; color:white; border:1px solid #806A75; border-bottom:3px solid #806A75; border-radius:4px; cursor:pointer; font-weight:600;">Resumen</button>
+<div id="choferesDropdownWrap" style="position:relative; display:inline-block;">
+<button id="btnChoferes" onclick="toggleChoferesMenu(event)" style="padding:6px 12px; background:#A08A95; color:white; border:1px solid #806A75; border-bottom:3px solid #806A75; border-radius:4px; cursor:pointer; font-weight:600;">Choferes ▾</button>
+<div id="choferesMenu" style="display:none; position:absolute; top:100%; left:0; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:9999; min-width:160px; padding:4px 0; margin-top:2px;">
+<div onclick="openChoferesSubTab('consolidado')" onmouseout="this.style.background=''" onmouseover="this.style.background='#f1f5f9'" style="padding:8px 16px; cursor:pointer; font-size:13px; color:#1e293b; font-weight:500;">Consolidado</div>
+<div onclick="openChoferesSubTab('devoluciones')" onmouseout="this.style.background=''" onmouseover="this.style.background='#f1f5f9'" style="padding:8px 16px; cursor:pointer; font-size:13px; color:#1e293b; font-weight:500;">Devoluciones</div>
+</div>
+</div>
+</div>
+<div class="hdr-right">
+<div class="retail-update">
+<div class="retail-update__label">Actualización Retail</div>
+<div class="retail-update__date"><strong id="hdrActualizacion">—</strong></div>
+<div id="hdrFecha" style="display:none">—</div>
+<div style="display:none">Semana  <strong id="hdrSem">—</strong></div>
+</div>
+<div style="position: relative; display: inline-block;">
+  <input type="file" #fileInput (change)="onFileSelected($event); uploadFile()" accept=".xlsx,.xlsm,.xls" style="display: none;">
+  <button class="btn-print btn-import" (click)="fileInput.click()" title="Importar datos semanales">Importar</button>
+  @if (uploadStatus) {
+    <div style="position: absolute; top: 100%; right: 0; background: #e0f2f1; color: #00695c; padding: 4px 8px; border-radius: 4px; font-size: 10px; margin-top: 4px; white-space: nowrap; z-index: 1000; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+      {{ uploadStatus }}
+    </div>
+  }
+</div>
+<button class="btn-print" onclick="imprimirReporte()">Imprimir</button>
+<button class="btn-reload" onclick="recargarDatos()" title="Actualizar datos">↺</button>
+</div>
+</div>
+<div class="ctrl">
+<div id="globalCtrlContainer" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+<label>Semana:</label>
+<div id="semDropWrap" style="position:relative;display:inline-block">
+<button id="semDropBtn" onclick="toggleSemDrop()" style="border:1px solid #bbb;border-radius:4px;padding:3px 24px 3px 7px;font-size:.72rem;cursor:pointer;background:#fff;min-width:160px;text-align:left;position:relative">
+<span id="semDropLabel">— Seleccionar semanas —</span>
+<span style="position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:.6rem">▼</span>
+</button>
+<div id="semDropMenu" style="display:none;position:absolute;top:100%;left:0;z-index:999;background:#fff;border:1px solid #bbb;border-radius:4px;box-shadow:0 3px 10px rgba(0,0,0,.15);min-width:200px;max-height:260px;overflow-y:auto;padding:4px 0"></div>
+</div>
+<label>Ruta:</label>
+<select id="rutaSelect" onchange="onRutaChange(this.value)" style="border:1px solid #bbb;border-radius:4px;padding:3px 8px;font-size:.72rem;background:#fff;margin-right:12px;cursor:pointer;">
+<option value="Todas">Todas las rutas</option>
+<option value="ENS">ENS</option>
+<option value="MXL 1">MXL 1</option>
+<option value="Ruta 2000">Ruta 2000</option>
+<option value="Rutas Playas">Rutas Playas</option>
+</select>
+<label>Tienda:</label>
+<div id="tiendaDropWrap" style="position:relative;display:inline-block">
+<button id="tiendaDropBtn" onclick="toggleTiendaDrop()" style="border:1px solid #bbb;border-radius:4px;padding:3px 24px 3px 7px;font-size:.72rem;cursor:pointer;background:#fff;min-width:160px;text-align:left;position:relative">
+<span id="tiendaDropLabel">— Seleccionar tiendas —</span>
+<span style="position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:.6rem">▼</span>
+</button>
+<div id="tiendaDropMenu" style="display:none;position:absolute;top:100%;left:0;z-index:999;background:#fff;border:1px solid #bbb;border-radius:4px;box-shadow:0 3px 10px rgba(0,0,0,.15);min-width:200px;max-height:260px;overflow-y:auto;padding:4px 0"></div>
+</div>
+<label>Producto:</label>
+<div id="productoDropWrap" style="position:relative;display:inline-block">
+<button id="productoDropBtn" onclick="toggleProductoDrop()" style="border:1px solid #bbb;border-radius:4px;padding:3px 24px 3px 7px;font-size:.72rem;cursor:pointer;background:#fff;min-width:160px;text-align:left;position:relative">
+<span id="productoDropLabel">— Todos los productos —</span>
+<span style="position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:.6rem">▼</span>
+</button>
+<div id="productoDropMenu" style="display:none;position:absolute;top:100%;left:0;z-index:999;background:#fff;border:1px solid #bbb;border-radius:4px;box-shadow:0 3px 10px rgba(0,0,0,.15);min-width:200px;max-height:260px;overflow-y:auto;padding:4px 0"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- End global-sticky-header -->
+
+<div class="grid" id="viewProducto">
+<div class="box">
+<div class="box-hdr">Ventas Históricas</div>
+<table class="t"><thead><tr><th>Producto</th><th>12 Semanas</th><th>3 Semanas</th></tr></thead>
+<tbody id="tHist"></tbody></table>
+</div>
+<div class="box">
+<div class="box-hdr">Índice de Merma por Artículo Últimas 3 Semanas</div>
+<table class="t"><thead><tr><th>Producto</th><th>Embarque</th><th>Merma</th><th>Merma %</th></tr></thead>
+<tbody id="tMerma"></tbody></table>
+</div>
+<div class="box">
+<div class="box-hdr">Venta Promedio Semanal</div>
+<table class="t"><thead><tr><th>Producto</th><th>Prom 12 Sem</th><th>Prom 3 Sem</th></tr></thead>
+<tbody id="tAvg"></tbody></table>
+</div>
+<div class="box">
+<div class="box-hdr" id="projTitle">Proyección Semana Siguiente</div>
+<table class="t"><thead><tr><th>Producto</th><th>Proyección</th></tr></thead>
+<tbody id="tProj"></tbody></table>
+</div>
+</div>
+<div class="grid" id="viewTienda" style="display:none;">
+<div class="box">
+<div class="box-hdr">Top Venta</div>
+<table class="t"><thead><tr><th>Tienda</th><th>UNIDADES</th><th>VENTA CFBC</th><th>VENTA WMX</th><th>%</th></tr></thead>
+<tbody id="tHistT"></tbody></table>
+</div>
+<div class="box">
+<div class="box-hdr">Top Merma</div>
+<table class="t"><thead><tr><th>Tienda</th><th>UNIDADES</th><th>$</th><th>CANTIDAD</th><th>%</th></tr></thead>
+<tbody id="tMermaT"></tbody></table>
+</div>
+<div class="box" id="boxAvgT" style="display:none">
+<div class="box-hdr" id="avgTTitle">Venta Promedio Semanal</div>
+<table class="t"><thead><tr><th>Producto</th><th>Venta CFBC</th><th>Venta WMX</th><th>Unidades</th></tr></thead>
+<tbody id="tAvgT"></tbody></table>
+</div>
+<div id="boxProjWrapper" style="display:none; flex-direction:row; gap:8px; align-items: flex-start;">
+<div class="box" id="boxProjT" style="flex:1; min-width:0; max-height:400px; overflow-y:auto;">
+<div class="box-hdr" id="projTTitle">Comparacion Ultimas 3 Semanas</div>
+<table class="t"><thead><tr><th>Merma Producto</th><th>Unidades</th><th>Cantidad</th></tr></thead>
+<tbody id="tProjT"></tbody></table>
+</div>
+<div class="box" id="boxMermaSem" style="flex:1; min-width:0; max-height:400px; overflow-y:auto;">
+<div class="box-hdr">Merma por Producto/Semana</div>
+<table class="t"><thead><tr><th>Producto</th><th>Merma</th><th>Cantidad</th></tr></thead>
+<tbody id="tMermaSem"></tbody></table>
+</div>
+</div>
+<div class="box" id="boxDiasT" style="display:none; grid-column: 1 / -1; overflow-x: auto;">
+<div class="box-hdr">Ventas por Día</div>
+<table class="t" style="min-width: 1200px;">
+<thead>
+<tr>
+<th>Producto</th>
+<th id="hdrThSab">Cnt Sab</th><th id="hdrThDom">Ctd Dom</th><th id="hdrThLun">Ctd Lun</th><th id="hdrThMar">Ctd Mar</th><th id="hdrThMie">Ctd Mie</th><th id="hdrThJue">Ctd Jue</th><th id="hdrThVie">Ctd Vie</th>
+<th id="hdrThVtaSab">Ventas Sab</th><th id="hdrThVtaDom">Ventas Dom</th><th id="hdrThVtaLun">Ventas Lun</th><th id="hdrThVtaMar">Ventas Mar</th><th id="hdrThVtaMie">Ventas Mie</th><th id="hdrThVtaJue">Ventas Jue</th><th id="hdrThVtaVie">Ventas Vie</th>
+</tr>
+</thead>
+<tbody id="tDiasT"></tbody>
+</table>
+</div>
+</div>
+<!-- Vista COMPARATIVO -->
+<div id="viewComparativo" style="display:none; padding:10px 16px; overflow:visible !important; height:auto !important;">
+<!-- Layout: tabla pivot izquierda | gráfica derecha -->
+<div style="display:flex; gap:10px; align-items:flex-start; flex-wrap:wrap;">
+<!-- Columna izquierda: tabla pivot -->
+<div class="box" style="flex:1 1 420px; overflow:auto; min-width:320px;">
+<div class="box-hdr" id="compTableTitle">Comparativo — ▶ semana → tiendas → productos</div>
+<table class="t" id="tComp">
+<thead id="tCompHead"></thead>
+<tbody id="tCompBody"></tbody>
+</table>
+</div>
+<!-- Columna derecha: gráfica dinámica (oculta) -->
+<div class="box" style="flex:1 1 300px; overflow:visible; min-width:240px; visibility:hidden;">
+<div class="box-hdr" id="compChartTitle">Venta CFBC por Semana</div>
+<div id="compChart" style="padding:8px; overflow-x:auto;"></div>
+</div>
+</div>
+<!-- IDs fantasma para compatibilidad -->
+<div style="display:none">
+<div id="compDrillBox"></div>
+<div id="compDrillTitle"></div>
+<div id="drillTiendaTitle"></div>
+<table><thead id="tDrillTiendaHead"></thead><tbody id="tDrillTiendaBody"></tbody></table>
+<div id="drillChartTienda"></div>
+<div id="drillProdBox"></div>
+<div id="drillProdTitle"></div>
+<table><thead id="tDrillProdHead"></thead><tbody id="tDrillProdBody"></tbody></table>
+<div id="drillChartProd"></div>
+<div id="compChartBox"></div>
+<div id="drillChartTiendaBox"></div>
+</div>
+</div>
+<!-- Vista Inventario Actual -->
+<div class="grid" id="viewInventario" style="display:none">
+<div class="box" style="overflow-x:auto">
+<div class="box-hdr">Inventario Actual — Tiendas</div>
+<table class="t">
+<thead id="tInvTiendaHead"></thead>
+<tbody id="tInvTienda"></tbody>
+</table>
+</div>
+<div class="box" style="overflow-x:auto">
+<div class="box-hdr" id="invProductoTitle">Inventario Actual — Productos</div>
+<table class="t">
+<thead id="tInvProductoHead"></thead>
+<tbody id="tInvProducto"></tbody>
+</table>
+</div>
+</div>
+<!-- Vista GASTO -->
+<div id="viewGasto" style="display:none; padding:16px 20px; overflow:visible !important; height:auto !important;">
+<div id="gastoGrid">
+<div class="box">
+<!-- Tablas LADO A LADO -->
+<div style="display:flex; align-items:stretch;">
+<!-- Tabla 1: Presupuesto por Ruta -->
+<div style="flex:1; min-width:0; overflow:auto;">
+<div style="padding:6px 14px; background:#fff; border-bottom:1px solid #f1f5f9;">
+<span style="font-size:.65rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#dc2626;">Presupuesto por Ruta</span>
+</div>
+<div class="gasto-table-wrap">
+<table id="tGasto">
+<thead id="tGastoHead"></thead>
+<tbody id="tGastoBody"></tbody>
+</table>
+</div>
+</div>
+<!-- Divisor VERTICAL -->
+<div style="width:2px; background:#e5e7eb; flex-shrink:0;"></div>
+<!-- Tabla 2: Gasolina y Otros Gastos -->
+<div style="flex:1; min-width:0; overflow:auto;">
+<div style="padding:6px 14px; background:#fff; border-bottom:1px solid #f1f5f9;">
+<span style="font-size:.65rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#dc2626;">Gasolina y Otros Gastos</span>
+</div>
+<div class="gasto-table-wrap">
+<table id="tGasolina">
+<thead id="tGasolinaHead"></thead>
+<tbody id="tGasolinaBody"></tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Vista Choferes -->
+<div id="viewChoferes" style="display:none; padding:12px 20px; font-family:sans-serif;">
+<!-- Sub-panel Consolidado -->
+<div id="subPanelConsolidado" style="display:block;">
+<div style="display:flex; justify-content:space-between; margin-bottom: 20px; gap:20px;">
+<!-- Lado CFBC -->
+<div style="flex:1; background:#fff; border:1px solid #c8d2e8; border-radius:8px; padding:15px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+<div style="display:flex; justify-content:space-between; margin-bottom:15px;">
+<div style="border:1px solid #e0e0e0; padding:10px; border-radius:4px; width:48%;">
+<div style="font-size:10px; color:#666;">UNIDADES CFBC</div>
+<div id="cfbcUnidades" style="font-size:18px; font-weight:bold;">0</div>
+</div>
+<div style="border:1px solid #e0e0e0; padding:10px; border-radius:4px; width:48%;">
+<div style="font-size:10px; color:#666;">VENTA CFBC</div>
+<div id="cfbcVenta" style="font-size:18px; font-weight:bold;">$0.00</div>
+</div>
+</div>
+<h3 style="margin-top:0; font-size:16px; border-bottom:2px solid #2563eb; padding-bottom:5px;">CFBC</h3>
+<div style="margin-bottom:10px; font-size:11px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+<div>Desde: <input id="cfbcDesde" onchange="renderChoferes()" style="font-size:11px; padding:2px; border:1px solid #ccc;" type="date" value="2026-05-01"/></div>
+<div>Hasta: <input id="cfbcHasta" onchange="renderChoferes()" style="font-size:11px; padding:2px; border:1px solid #ccc;" type="date"/></div>
+<select id="cfbcTienda" onchange="syncFilter(this, 'wmTienda'); renderChoferes()" style="font-size:11px; padding:2px; border:1px solid #ccc;"><option value="ALL">Tienda (Todas)</option></select>
+<select id="cfbcProducto" onchange="syncFilter(this, 'wmProducto'); renderChoferes()" style="font-size:11px; padding:2px; border:1px solid #ccc;"><option value="ALL">Producto (Todos)</option></select>
+</div>
+<div style="height:auto; overflow:visible;">
+<table id="cfbcTable" style="width:100%; border-collapse:collapse; font-size:11px; text-align:left;">
+<thead style="background:#eef4fb; position:sticky; top:0;">
+<tr>
+<th style="padding:5px; border-bottom:1px solid #ddd; width:25px;"></th>
+<th style="padding:5px; border-bottom:1px solid #ddd; width:25px;"></th>
+<th style="padding:5px; border-bottom:1px solid #ddd;">Fecha</th>
+<th style="padding:5px; border-bottom:1px solid #ddd;">Folio</th>
+<th style="padding:5px; border-bottom:1px solid #ddd;">Tienda</th>
+<th style="padding:5px; border-bottom:1px solid #ddd;">Producto</th>
+<th style="padding:5px; text-align:right; border-bottom:1px solid #ddd;">Unidades</th>
+<th style="padding:5px; text-align:right; border-bottom:1px solid #ddd;">Venta</th>
+<th style="padding:5px; border-bottom:1px solid #ddd;">Notas</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+</div>
+</div>
+<!-- Lado WALMART -->
+<div style="flex:1; background:#fff; border:1px solid #c8d2e8; border-radius:8px; padding:15px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+<div style="display:flex; justify-content:space-between; margin-bottom:15px;">
+<div style="border:1px solid #e0e0e0; padding:10px; border-radius:4px; width:48%;">
+<div style="font-size:10px; color:#666;">UNIDADES WALMART</div>
+<div id="walmartUnidades" style="font-size:18px; font-weight:bold;">0</div>
+</div>
+<div style="border:1px solid #e0e0e0; padding:10px; border-radius:4px; width:48%;">
+<div style="font-size:10px; color:#666;">VENTA WALMART</div>
+<div id="walmartVenta" style="font-size:18px; font-weight:bold;">$0.00</div>
+</div>
+</div>
+<h3 style="margin-top:0; font-size:16px; border-bottom:2px solid #10b981; padding-bottom:5px;">Walmart</h3>
+<div style="margin-bottom:10px; font-size:11px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+<div>Desde: <input id="wmDesde" onchange="renderChoferes()" style="font-size:11px; padding:2px; border:1px solid #ccc;" type="date" value="2026-05-01"/></div>
+<div>Hasta: <input id="wmHasta" onchange="renderChoferes()" style="font-size:11px; padding:2px; border:1px solid #ccc;" type="date"/></div>
+<select id="wmTienda" onchange="syncFilter(this, 'cfbcTienda'); renderChoferes()" style="font-size:11px; padding:2px; border:1px solid #ccc;"><option value="ALL">Tienda (Todas)</option></select>
+<select id="wmProducto" onchange="syncFilter(this, 'cfbcProducto'); renderChoferes()" style="font-size:11px; padding:2px; border:1px solid #ccc;"><option value="ALL">Producto (Todos)</option></select>
+</div>
+<div style="height:auto; overflow:visible;">
+<table id="walmartTable" style="width:100%; border-collapse:collapse; font-size:11px; text-align:left;">
+<thead style="background:#eef4fb; position:sticky; top:0;">
+<tr>
+<th style="padding:5px; border-bottom:1px solid #ddd; width:25px;"></th>
+<th style="padding:5px; border-bottom:1px solid #ddd; width:25px;"></th>
+<th style="padding:5px; border-bottom:1px solid #ddd;">Fecha</th>
+<th style="padding:5px; border-bottom:1px solid #ddd;">Tienda</th>
+<th style="padding:5px; border-bottom:1px solid #ddd;">Producto</th>
+<th style="padding:5px; text-align:right; border-bottom:1px solid #ddd;">Unidades</th>
+<th style="padding:5px; text-align:right; border-bottom:1px solid #ddd;">Venta</th>
+<th style="padding:5px; border-bottom:1px solid #ddd;">Notas</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+</div>
+</div>
+</div>
+</div><!-- end subPanelConsolidado -->
+<!-- Sub-panel Devoluciones -->
+<div id="subPanelDevoluciones" style="display:none;">
+<div style="background:#fff; border:1px solid #c8d2e8; border-radius:8px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+<!-- Filtros -->
+<div style="margin-bottom:12px; font-size:11px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+<div>Desde: <input id="devDesde" onchange="renderDevoluciones()" style="font-size:11px; padding:2px; border:1px solid #ccc;" type="date"/></div>
+<div>Hasta: <input id="devHasta" onchange="renderDevoluciones()" style="font-size:11px; padding:2px; border:1px solid #ccc;" type="date"/></div>
+<div>Folio: <input id="devFolioFilter" oninput="renderDevoluciones()" placeholder="Buscar folio..." style="font-size:11px; padding:2px; border:1px solid #ccc; width:100px;" type="text"/></div>
+<div>Producto: <input id="devProductoFilter" oninput="renderDevoluciones()" placeholder="Buscar producto..." style="font-size:11px; padding:2px; border:1px solid #ccc; width:130px;" type="text"/></div>
+</div>
+<!-- Tabla -->
+<div style="overflow-x:auto;">
+<table id="devolucionesTable" style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">
+<thead style="background:#fff;">
+<tr>
+<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626;">Fecha</th>
+<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626;">Folio</th>
+<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626;">Serie</th>
+<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626;">Producto</th>
+<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626; text-align:right;">Cant. Devuelta</th>
+<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626; text-align:right;">Precio Unitario</th>
+<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626; text-align:right;">Total Devolucion</th>
+<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626; text-align:center;">Motivo</th>
+</tr>
+</thead>
+<tbody id="devolucionesTbody"></tbody>
+</table>
+</div>
+</div>
+</div><!-- end subPanelDevoluciones -->
+</div><!-- end viewChoferes -->
+<!-- Vista Resumen -->
+<div id="viewResumen" style="display:none;">
+<div class="resumen-layout">
+<div class="box resumen-main-box" style="height:auto !important; min-width:0; overflow:visible;">
+<div class="box-hdr" id="resumenTitle" style="display:flex; justify-content:flex-start; align-items:center; flex-wrap:wrap; gap:20px;">
+<span id="resumenTitleText" style="font-size:1.6em; font-weight:bold; color:#1a3a5c; margin-bottom:5px;">Resumen Diario</span>
+<div class="mode-btn-group" style="display:flex; gap:5px; align-items:center; flex-wrap:wrap; justify-content:flex-start;">
+<button id="btnAddCaptureSem" onclick="window.addCaptureRowAll()" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;background:#1565c0;color:#fff;border:none;border-radius:6px;padding:4px 11px;cursor:pointer;letter-spacing:.02em;" title="Agregar semana de captura"><span class="material-icons" style="font-size:16px">add_circle</span> SEM</button>
+<button disabled="" id="btnRemoveCaptureSem" onclick="window.removeCaptureRowAll()" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;background:#c62828;color:#fff;border:none;border-radius:6px;padding:4px 11px;cursor:pointer;opacity:0.45;letter-spacing:.02em;" title="Eliminar última semana de captura"><span class="material-icons" style="font-size:16px">remove_circle</span> SEM</button>
+<button id="btnSaveCaptureAll" onclick="window.saveAllCaptureRows()" style="display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;background:#2e7d32;color:#fff;border:none;border-radius:6px;padding:4px 7px;cursor:pointer;letter-spacing:.02em;" title="Guardar todas las capturas visibles"><span class="material-icons" style="font-size:16px">save</span></button>
+<button id="btnClearCapture" onclick="_showDeleteWeekDialog()" style="display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;background:#fff;color:#c62828;border:1px solid #c62828;border-radius:6px;padding:4px 7px;cursor:pointer;letter-spacing:.02em;" title="Borrar capturas guardadas (afecta a todos los usuarios)"><span class="material-icons" style="font-size:16px">delete_sweep</span></button>
+<button id="btnToggleTotalPos" onclick="if(typeof window.toggleTotalPosition === 'function') window.toggleTotalPosition();" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;background:#eef2fa;color:#1a3a5c;border:1px solid #c8d2e8;border-radius:6px;padding:4px 11px;cursor:pointer;letter-spacing:.02em;" title="Mover Total General Arriba/Abajo"><span class="material-icons" style="font-size:16px">swap_vert</span> Total</button>
+<div id="metricFilters" style="display:inline-flex; align-items:center; gap:8px; background:#eef2fa; padding:4px 8px; border-radius:6px; border:1px solid #c8d2e8; font-size:12px; font-weight:600; color:#1a3a5c;">
+<label style="cursor:pointer; display:flex; align-items:center; gap:2px;" title="Embarque"><input checked="" onclick="if(document.querySelectorAll('#metricFilters input:checked').length===0) return false; if(typeof renderResumen==='function') renderResumen()" type="checkbox" value="embarque"/> Emb</label>
+<label style="cursor:pointer; display:flex; align-items:center; gap:2px;" title="Ventas POS"><input checked="" onclick="if(document.querySelectorAll('#metricFilters input:checked').length===0) return false; if(typeof renderResumen==='function') renderResumen()" type="checkbox" value="ventas"/> POS</label>
+<label style="cursor:pointer; display:flex; align-items:center; gap:2px;" title="Sell Thru"><input checked="" onclick="if(document.querySelectorAll('#metricFilters input:checked').length===0) return false; if(typeof renderResumen==='function') renderResumen()" type="checkbox" value="sell_thru"/> Thru</label>
+</div>
+<button id="btnExportCapture" onclick="window.exportCaptureData()" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;background:#107c41;color:#fff;border:none;border-radius:6px;padding:4px 11px;cursor:pointer;letter-spacing:.02em;" title="Exportar captura"><span class="material-icons" style="font-size:16px">download</span> Exportar</button>
+<button class="mode-btn active" id="btnPivotProducto" onclick="setResumenPivot('producto')">Producto</button>
+<button class="mode-btn" id="btnPivotTienda" onclick="setResumenPivot('tienda')">Tienda</button>
+</div>
+</div>
+<div class="resumen-table-wrap">
+<table class="t" id="tResumen">
+<thead id="tResumenHead"></thead>
+<tbody id="tResumenBody"></tbody>
+</table>
+</div>
+</div>
+<div class="box resumen-side-box" style="display:none;">
+<div class="box-hdr" style="display:flex; justify-content:space-between; align-items:center;">
+<span>Ordenes de Reabasto</span>
+<div style="display:flex; gap:10px; align-items:center;">
+<select id="reabastoWindowSelect" onchange="setReabastoWindow(this.value)" style="font-size:0.75rem; padding:2px 5px; border-radius:3px; border:1px solid #ccc; background:#fff;">
+<option value="1">1 Semana</option>
+<option value="2">2 Semanas</option>
+<option selected="" value="3">3 Semanas</option>
+</select>
+<button onclick="exportReabastoExcel()" style="font-size:0.75rem; padding:3px 8px; background:#107c41; color:white; border:none; border-radius:3px; cursor:pointer; font-weight:bold;">📥 Excel</button>
+</div>
+</div>
+<div class="reabasto-panel">
+<div class="reabasto-meta" id="reabastoMeta">Proyección de reabasto dinámico basado en las semanas seleccionadas.</div>
+<div class="reabasto-table-wrap">
+<table class="reabasto-table">
+<thead>
+<tr>
+<th>Prioridad</th>
+<th>Ruta</th>
+<th>Tienda</th>
+<th>Producto</th>
+<th>Inv.</th>
+<th>Prom/dia</th>
+<th>Cob.</th>
+<th>Entrega</th>
+<th>Dias ent.</th>
+<th>Seg.</th>
+<th>Mult.</th>
+<th>Orden</th>
+<th>Motivo</th>
+</tr>
+</thead>
+<tbody id="tReabastoBody"></tbody>
+</table>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+</div>
+
+<!-- AI Chat Widget Container -->
+<div id="aiChatWidget" [style.display]="isResumenTab ? 'block' : 'none'">
+
+<!-- Floating Chat Bubble -->
+<button (click)="toggleChat()" style="position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #1565c0, #0d47a1); color: #fff; border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10001; transition: transform 0.2s; outline: none;">
+  <span class="material-icons" style="font-size: 30px;">{{ isChatOpen ? 'close' : 'chat' }}</span>
+</button>
+
+<!-- Chat IA Box -->
+<div class="box ai-chat-box" [style.display]="isChatOpen ? 'flex' : 'none'" style="position:fixed; bottom:90px; right:20px; width:360px; height:500px !important; max-height:calc(100vh - 120px) !important; flex-direction:column; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.25); background:#fff; overflow:hidden; z-index:10000; transition: all 0.3s ease;">
+<div class="box-hdr" style="display:flex; justify-content:space-between; align-items:center; background:linear-gradient(135deg, #1a3a5c, #0f2540); color:#fff; border-bottom:none; padding:12px 16px;">
+<div style="display:flex; align-items:center; gap:8px;">
+<span class="material-icons" style="font-size:20px; color:#60a5fa;">query_stats</span>
+<span style="font-size:1rem; font-weight:700;">Consultor de datos</span>
+</div>
+</div>
+<div id="aiChatMessages" style="flex:1; padding:16px; overflow-y:auto; background:#f8fafc; display:flex; flex-direction:column; gap:12px; font-size:0.85rem;">
+<div style="display:flex; flex-direction:column; gap:4px; max-width:85%; align-self:flex-start;">
+<div style="background:#e2e8f0; color:#334155; padding:10px 14px; border-radius:12px; border-top-left-radius:2px; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+              Consulta la <strong>Tabla Resumen</strong> sin usar IA. Prueba: “¿Qué tienda vendió más?”, “Total de embarque” o “Productos con Sell Thru menor a 50%”.
+            </div>
+</div>
+</div>
+<div style="padding:12px; background:#fff; border-top:1px solid #e2e8f0; display:flex; gap:8px; align-items:center;">
+<input id="aiChatInput" onkeypress="if(event.key === 'Enter') sendChatMessage()" placeholder="Consulta ventas, embarque, merma o Sell Thru..." style="flex:1; padding:10px 16px; border:1px solid #cbd5e1; border-radius:20px; outline:none; font-size:0.85rem; background:#f1f5f9; color:#334155; transition:border-color 0.2s;" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#cbd5e1'" type="text"/>
+<button onclick="sendChatMessage()" style="background:#1565c0; color:#fff; border:none; width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; transition:background 0.2s, transform 0.1s;" onmouseover="this.style.background='#1e3a8a'" onmouseout="this.style.background='#1565c0'" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'">
+<span class="material-icons" style="font-size:18px;">send</span>
+</button>
+</div>
+</div>
+
+</div>
+<!-- End AI Chat Widget Container -->
+
+<!-- ImageViewer Modal -->
+<div id="imgViewerOverlay" onclick="closeImageViewer()" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:999998; backdrop-filter:blur(3px);"></div>
+<div id="imgViewerModal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:999999; max-width:90vw; max-height:90vh; text-align:center;">
+<button onclick="closeImageViewer()" style="position:absolute; top:-40px; right:0; background:transparent; border:none; color:white; font-size:30px; cursor:pointer;">×</button>
+<img id="imgViewerImg" src="" style="max-width:100%; max-height:90vh; border-radius:8px; box-shadow:0 10px 40px rgba(0,0,0,0.5);"/>
+</div>
+

@@ -1,0 +1,21 @@
+# Dependencies and build output
+**/node_modules/
+**/dist/
+**/.angular/
+
+# Environment variables and credentials
+**/.env
+**/.env.*
+!**/.env.example
+
+# Local caches and logs
+**/.wa123_cache/
+*.log
+npm-debug.log*
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
