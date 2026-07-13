@@ -488,6 +488,13 @@
     font-weight:800;
   }
 
+  #viewChoferes #devolucionesTable thead,
+  #viewChoferes #devolucionesTable thead tr,
+  #viewChoferes #devolucionesTable thead th,
+  #viewChoferes #devolucionesTable tbody tr:last-child {
+    background:#fff !important;
+  }
+
   /* Scrollbars */
   * { scrollbar-width:thin; scrollbar-color:#cbd5e1 transparent; }
 }
