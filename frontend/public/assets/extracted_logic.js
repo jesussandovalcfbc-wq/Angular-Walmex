@@ -1700,7 +1700,7 @@ function renderGasto(){
   var headHTML = '<tr><th>RUTA / PRODUCTO</th>';
   sems.forEach(function(s){
     var yr = Math.floor(s/100), wk = s%100;
-    var label = (yr >= 2000) ? yr+'-'+String(wk).padStart(2,'0') : String(s).padStart(2,'0');
+    var label = (yr >= 2000) ? String(yr).slice(-2)+String(wk).padStart(2,'0') : String(s).padStart(4,'0');
     headHTML += '<th>'+label+'</th>';
   });
   headHTML += '<th>Grand Total</th></tr>';
@@ -1811,7 +1811,7 @@ function renderGasolina(){
   var headHTML = '<tr><th>Concepto</th>';
   sems.forEach(function(s){
     var yr = Math.floor(s/100), wk = s%100;
-    var label = (yr >= 2000) ? yr+'-'+String(wk).padStart(2,'0') : String(s).padStart(2,'0');
+    var label = (yr >= 2000) ? String(yr).slice(-2)+String(wk).padStart(2,'0') : String(s).padStart(4,'0');
     headHTML += '<th>'+label+'</th>';
   });
   headHTML += '<th>Grand Total</th></tr>';
@@ -3785,6 +3785,222 @@ function _ensureNextSemanaProyeccion() {
   return curNext;
 }
 
+/* Analisis de variacion POS. Es estrictamente de lectura: usa los datos ya
+   cargados en DATA.resumen_diario y nunca guarda estado en Supabase. */
+function _resumenAnalysisStatus(previous, current){
+  var delta = current - previous;
+  if(previous === 0 && current === 0) return {key:'stable', label:'Sin ventas'};
+  if(previous === 0 && current > 0) return {key:'up', label:'Nuevo movimiento'};
+  var pct = previous ? (delta / previous) * 100 : 0;
+  if(delta >= 5 && pct >= 5) return {key:'up', label:'Subiendo'};
+  if(delta <= -5 && pct <= -5) return {key:'down', label:'Bajando'};
+  return {key:'stable', label:'Sin movimiento'};
+}
+
+function _collectResumenPosAnalysis(){
+  var weeks = getSemanasActivas().map(function(s){ return String(s); }).sort(function(a,b){
+    return (parseInt(a,10)||0) - (parseInt(b,10)||0);
+  });
+  var tiendas = getTiendasActivas();
+  var productos = getProductosActivos();
+  var tiendaSet = {};
+  var productoSet = {};
+  tiendas.forEach(function(t){ tiendaSet[t] = true; });
+  productos.forEach(function(p){ productoSet[p] = true; });
+
+  var totals = {};
+  var byStore = {};
+  var byProduct = {};
+  var byPair = {};
+  weeks.forEach(function(w){ totals[w] = 0; });
+
+  var srcRoot = (typeof DATA !== 'undefined' && DATA.resumen_diario) || {};
+  tiendas.forEach(function(store){
+    var storeSrc = srcRoot[store] || {};
+    weeks.forEach(function(week){
+      var weekSrc = storeSrc[week] || {};
+      Object.keys(weekSrc).forEach(function(product){
+        if(!productoSet[product]) return;
+        Object.keys(weekSrc[product] || {}).forEach(function(date){
+          var value = Number(((weekSrc[product][date] || {}).ventas)) || 0;
+          totals[week] += value;
+          if(!byStore[store]) byStore[store] = {};
+          if(!byProduct[product]) byProduct[product] = {};
+          if(!byPair[store]) byPair[store] = {};
+          if(!byPair[store][product]) byPair[store][product] = {};
+          byStore[store][week] = (byStore[store][week] || 0) + value;
+          byProduct[product][week] = (byProduct[product][week] || 0) + value;
+          byPair[store][product][week] = (byPair[store][product][week] || 0) + value;
+        });
+      });
+    });
+  });
+
+  return {weeks:weeks, totals:totals, byStore:byStore, byProduct:byProduct, byPair:byPair};
+}
+
+function _resumenAnalysisRows(source, previousWeek, currentWeek){
+  return Object.keys(source || {}).map(function(key){
+    var previous = Number((source[key] || {})[previousWeek]) || 0;
+    var current = Number((source[key] || {})[currentWeek]) || 0;
+    var delta = current - previous;
+    var pct = previous ? (delta / previous) * 100 : null;
+    var status = _resumenAnalysisStatus(previous, current);
+    return {key:key, previous:previous, current:current, delta:delta, pct:pct, status:status};
+  }).sort(function(a,b){
+    return Math.abs(b.delta) - Math.abs(a.delta) || b.current - a.current || a.key.localeCompare(b.key);
+  });
+}
+
+function _resumenAnalysisNumber(value){
+  return Number(value || 0).toLocaleString('es-MX', {maximumFractionDigits:0});
+}
+
+function _resumenAnalysisDelta(value){
+  var n = Number(value || 0);
+  return (n > 0 ? '+' : '') + _resumenAnalysisNumber(n);
+}
+
+function _resumenAnalysisEscape(value){
+  return String(value === null || value === undefined ? '' : value)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function setResumenAnalysisView(view){
+  state.resumenAnalysisView = view === 'producto' ? 'producto' : 'tienda';
+  state.resumenAnalysisSelected = null;
+  renderResumenAnalysis();
+}
+
+function setResumenAnalysisFilter(filter){
+  state.resumenAnalysisFilter = filter || 'all';
+  renderResumenAnalysis();
+}
+
+function selectResumenAnalysisItem(index){
+  var rows = window._resumenAnalysisVisibleRows || [];
+  if(!rows[index]) return;
+  state.resumenAnalysisSelected = rows[index].key;
+  renderResumenAnalysis();
+}
+
+function toggleResumenStoreProducts(index){
+  var keys = window._resumenAnalysisStoreKeys || [];
+  var store = keys[index];
+  if(!store) return;
+  if(!state.resumenExpandedStores) state.resumenExpandedStores = {};
+  if(state.resumenExpandedStores[store]) delete state.resumenExpandedStores[store];
+  else state.resumenExpandedStores[store] = true;
+  renderResumenAnalysis();
+}
+
+function toggleResumenAnalisis(){
+  state.resumenAnalisisOpen = state.resumenAnalisisOpen === false ? true : false;
+  var panel = document.getElementById('resumenAnalysisPanel');
+  var btn = document.getElementById('btnResumenAnalisis');
+  if(panel) panel.style.display = state.resumenAnalisisOpen ? '' : 'none';
+  if(btn) btn.className = state.resumenAnalisisOpen ? 'mode-btn active' : 'mode-btn';
+  if(state.resumenAnalisisOpen) renderResumenAnalysis();
+}
+
+function renderResumenAnalysis(){
+  var host = document.getElementById('resumenAnalysisContent');
+  var panel = document.getElementById('resumenAnalysisPanel');
+  var btn = document.getElementById('btnResumenAnalisis');
+  if(!host || !panel) return;
+  if(typeof state.resumenAnalisisOpen !== 'boolean') state.resumenAnalisisOpen = true;
+  panel.style.display = state.resumenAnalisisOpen ? '' : 'none';
+  if(btn) btn.className = state.resumenAnalisisOpen ? 'mode-btn active' : 'mode-btn';
+  if(!state.resumenAnalisisOpen) return;
+
+  var analysis = _collectResumenPosAnalysis();
+  var weeks = analysis.weeks;
+  var layout = document.querySelector('#viewResumen .resumen-layout');
+  if(weeks.length < 2){
+    host.innerHTML = '';
+    panel.style.display = 'none';
+    if(btn) btn.classList.add('analysis-unavailable');
+    if(layout) layout.classList.add('analysis-unavailable');
+    return;
+  }
+  if(btn) btn.classList.remove('analysis-unavailable');
+  if(layout) layout.classList.remove('analysis-unavailable');
+  panel.style.display = '';
+
+  var previousWeek = weeks[weeks.length - 2];
+  var currentWeek = weeks[weeks.length - 1];
+  var storeRows = _resumenAnalysisRows(analysis.byStore, previousWeek, currentWeek).filter(function(row){
+    return row.previous !== 0 || row.current !== 0;
+  });
+  var productRows = _resumenAnalysisRows(analysis.byProduct, previousWeek, currentWeek).filter(function(row){
+    return row.previous !== 0 || row.current !== 0;
+  });
+  window._resumenAnalysisStoreKeys = storeRows.map(function(row){ return row.key; });
+
+  function managementTable(title, itemLabel, rows){
+    var isStoreTable = title === 'Tiendas';
+    var order = [
+      {key:'up', label:'SUBIENDO'},
+      {key:'down', label:'BAJANDO'},
+      {key:'stable', label:'SIN MOVIMIENTO'}
+    ];
+    var body = '';
+    order.forEach(function(group){
+      var groupRows = rows.filter(function(row){ return row.status.key === group.key; });
+      if(!groupRows.length) return;
+      body += '<tr class="analysis-group-row '+group.key+'"><td colspan="6">'+group.label+'</td></tr>';
+      groupRows.forEach(function(row){
+        var pctText = row.pct === null ? (row.current > 0 ? 'Nuevo' : '—') : ((row.pct > 0 ? '+' : '') + row.pct.toFixed(1) + '%');
+        var storeIndex = isStoreTable ? window._resumenAnalysisStoreKeys.indexOf(row.key) : -1;
+        var expanded = isStoreTable && state.resumenExpandedStores && state.resumenExpandedStores[row.key];
+        body += '<tr'+(isStoreTable ? ' class="analysis-store-row'+(expanded ? ' expanded' : '')+'" onclick="toggleResumenStoreProducts('+storeIndex+')" title="Ver productos de la tienda"' : '')+'>'+
+          '<td><span class="analysis-name">'+_resumenAnalysisEscape(row.key.replace(/^BQT\s+/i,''))+'</span></td>'+
+          '<td>'+_resumenAnalysisNumber(row.previous)+'</td>'+
+          '<td>'+_resumenAnalysisNumber(row.current)+'</td>'+
+          '<td class="analysis-change '+row.status.key+'"><strong>'+_resumenAnalysisDelta(row.delta)+'</strong></td>'+
+          '<td class="analysis-percent '+row.status.key+'">'+pctText+'</td>'+
+          '<td><span class="analysis-status '+row.status.key+'">'+row.status.label+'</span></td></tr>';
+        if(expanded){
+          var productDetailRows = _resumenAnalysisRows((analysis.byPair[row.key] || {}), previousWeek, currentWeek).filter(function(productRow){
+            return productRow.previous !== 0 || productRow.current !== 0;
+          });
+          body += '<tr class="analysis-drill-heading"><td colspan="6">Productos de '+_resumenAnalysisEscape(row.key.replace(/^SC\s+/i,''))+'</td></tr>';
+          productDetailRows.forEach(function(productRow){
+            var productPctText = productRow.pct === null ? (productRow.current > 0 ? 'Nuevo' : '—') : ((productRow.pct > 0 ? '+' : '') + productRow.pct.toFixed(1) + '%');
+            body += '<tr class="analysis-drill-row">'+
+              '<td><span class="analysis-drill-name">'+_resumenAnalysisEscape(productRow.key.replace(/^BQT\s+/i,''))+'</span></td>'+
+              '<td>'+_resumenAnalysisNumber(productRow.previous)+'</td>'+
+              '<td>'+_resumenAnalysisNumber(productRow.current)+'</td>'+
+              '<td class="analysis-change '+productRow.status.key+'"><strong>'+_resumenAnalysisDelta(productRow.delta)+'</strong></td>'+
+              '<td class="analysis-percent '+productRow.status.key+'">'+productPctText+'</td>'+
+              '<td><span class="analysis-status '+productRow.status.key+'">'+productRow.status.label+'</span></td></tr>';
+          });
+        }
+      });
+    });
+    var totalPrevious = rows.reduce(function(sum,row){ return sum + row.previous; }, 0);
+    var totalCurrent = rows.reduce(function(sum,row){ return sum + row.current; }, 0);
+    var totalDifference = totalCurrent - totalPrevious;
+    var totalPercent = totalPrevious ? (totalDifference / totalPrevious) * 100 : null;
+    var totalClass = totalDifference > 0 ? 'up' : totalDifference < 0 ? 'down' : 'stable';
+    var totalPercentText = totalPercent === null ? '—' : ((totalPercent > 0 ? '+' : '') + totalPercent.toFixed(1) + '%');
+    var totalRow = '<tfoot><tr class="analysis-total-row"><td>Total</td>'+
+      '<td>'+_resumenAnalysisNumber(totalPrevious)+'</td>'+
+      '<td>'+_resumenAnalysisNumber(totalCurrent)+'</td>'+
+      '<td class="'+totalClass+'">'+_resumenAnalysisDelta(totalDifference)+'</td>'+
+      '<td class="'+totalClass+'">'+totalPercentText+'</td><td></td></tr></tfoot>';
+    return '<section class="analysis-management-section"><h3>'+title+'</h3>'+
+      '<div class="analysis-table-wrap"><table class="analysis-table"><thead><tr><th>'+itemLabel+'</th><th>'+resumenSemLabel(previousWeek)+'</th><th>'+resumenSemLabel(currentWeek)+'</th><th>Diferencia</th><th>Variación</th><th>Estado</th></tr></thead><tbody>'+
+      (body || '<tr><td colspan="6" class="analysis-no-rows">No hay ventas para comparar.</td></tr>')+
+      '</tbody>'+totalRow+'</table></div></section>';
+  }
+
+  host.innerHTML = '<div class="analysis-management-head"><h2>Variación de Ventas</h2></div>'+
+    managementTable('Tiendas', 'Tienda', storeRows)+
+    managementTable('Productos', 'Producto', productRows);
+}
+
 function renderResumen(){
   if(window._skipCaptureSaveOnce) {
     window._skipCaptureSaveOnce = false;
@@ -3809,6 +4025,7 @@ function renderResumen(){
     }
   }
   var pivotMode = state.resumenPivot || 'producto';
+  renderResumenAnalysis();
 
   window.updateRemoveCaptureBtn = function(){
     var btn = document.getElementById('btnRemoveCaptureSem');

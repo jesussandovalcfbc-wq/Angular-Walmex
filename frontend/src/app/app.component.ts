@@ -13,6 +13,10 @@ import { forkJoin } from 'rxjs';
 export class AppComponent implements AfterViewInit, OnDestroy {
   title = 'frontend';
 
+  private readonly apiUrl = window.location.hostname === 'localhost'
+    ? 'http://localhost:8000/api'
+    : 'https://walmex-api.onrender.com/api';
+
   selectedFile: File | null = null;
   uploadStatus: string = '';
   isChatOpen: boolean = false;
@@ -26,12 +30,10 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     const loaderTxt = document.querySelector('.ld-txt');
     if (loaderTxt) loaderTxt.innerHTML = 'Conectando...';
 
-    const API_URL = 'https://walmex-api.onrender.com/api';
-
     forkJoin({
-      dashboard:    this.http.get(`${API_URL}/dashboard-data`),
-      supabase:     this.http.get(`${API_URL}/supabase-data`),
-      devoluciones: this.http.get(`${API_URL}/devoluciones`)
+      dashboard:    this.http.get(`${this.apiUrl}/dashboard-data`),
+      supabase:     this.http.get(`${this.apiUrl}/supabase-data`),
+      devoluciones: this.http.get(`${this.apiUrl}/devoluciones`)
     }).subscribe({
       next: (responses: any) => {
         if (loaderTxt) loaderTxt.innerHTML = 'Conectando...';
@@ -121,7 +123,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     reader.readAsDataURL(this.selectedFile);
     reader.onload = () => {
       const base64Content = (reader.result as string).split(',')[1];
-      this.http.post('https://walmex-api.onrender.com/api/upload-excel', {
+      this.http.post(`${this.apiUrl}/upload-excel`, {
         content: base64Content,
         fileName: this.selectedFile?.name
       }).subscribe({

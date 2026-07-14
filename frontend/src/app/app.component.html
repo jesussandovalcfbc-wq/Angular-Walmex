@@ -214,9 +214,9 @@
 </div>
 </div>
 <!-- Vista GASTO -->
-<div id="viewGasto" style="display:none; padding:16px 20px; overflow:visible !important; height:auto !important;">
+<div id="viewGasto" style="display:none; overflow:visible !important; height:auto !important;">
 <div id="gastoGrid">
-<div class="box">
+<div class="box gasto-tables-shell">
 <!-- Tablas LADO A LADO -->
 <div style="display:flex; align-items:stretch;">
 <!-- Tabla 1: Presupuesto por Ruta -->
@@ -382,6 +382,7 @@
 <button id="btnExportCapture" onclick="window.exportCaptureData()" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;background:#107c41;color:#fff;border:none;border-radius:6px;padding:4px 11px;cursor:pointer;letter-spacing:.02em;" title="Exportar captura"><span class="material-icons" style="font-size:16px">download</span> Exportar</button>
 <button class="mode-btn active" id="btnPivotProducto" onclick="setResumenPivot('producto')">Producto</button>
 <button class="mode-btn" id="btnPivotTienda" onclick="setResumenPivot('tienda')">Tienda</button>
+<button class="mode-btn active" id="btnResumenAnalisis" onclick="toggleResumenAnalisis()">Análisis</button>
 </div>
 </div>
 <div class="resumen-table-wrap">
@@ -391,6 +392,9 @@
 </table>
 </div>
 </div>
+<aside class="resumen-analysis-panel" id="resumenAnalysisPanel">
+<div id="resumenAnalysisContent"></div>
+</aside>
 <div class="box resumen-side-box" style="display:none;">
 <div class="box-hdr" style="display:flex; justify-content:space-between; align-items:center;">
 <span>Ordenes de Reabasto</span>
