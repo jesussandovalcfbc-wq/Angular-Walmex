@@ -550,7 +550,7 @@ export async function cargarDatos(cacheKey = "") {
   const gastosOtros: any = {};
   const gastosTipos: string[] = [];
   const gastosSc: string[] = [];
-  const corteReporteGastosApp = new Date(2026, 6, 1);
+  const corteReporteGastosApp = new Date(2026, 5, 29);
 
   const agregarGasto = (ruta: string, concepto: string, semKey: any, monto: number) => {
     if (!ruta || !concepto || !semKey || monto <= 0) return;
@@ -619,7 +619,7 @@ export async function cargarDatos(cacheKey = "") {
     }
   }
 
-  // Desde julio de 2026, Otros Gastos se obtiene de REPORTE-GASTOSAPP.
+  // Desde el 29 de junio de 2026, Otros Gastos se obtiene de REPORTE-GASTOSAPP.
   // Columnas utilizadas: Tienda, Fecha del Gasto, Categoria y Monto.
   if (wsReporteGastosApp) {
     const appRows = XLSX.utils.sheet_to_json<any[]>(wsReporteGastosApp, { header: 1 });
