@@ -481,9 +481,11 @@ export async function cargarDatos(cacheKey = "") {
 
   let wsDetalle = null;
   let wsGastos = null;
+  let wsReporteGastosApp = null;
   for (const sheetName of wb.SheetNames) {
     if (sheetName.trim().toLowerCase() === 'detalle') wsDetalle = wb.Sheets[sheetName];
     if (sheetName.trim().toLowerCase() === 'gastos') wsGastos = wb.Sheets[sheetName];
+    if (sheetName.trim().toLowerCase() === 'reporte-gastosapp') wsReporteGastosApp = wb.Sheets[sheetName];
   }
 
   const detalleInventario = { fechas: [] as string[], fechas_por_semana: {} as any, fecha_to_semana: {} as any, data: {} as any };
@@ -548,6 +550,16 @@ export async function cargarDatos(cacheKey = "") {
   const gastosOtros: any = {};
   const gastosTipos: string[] = [];
   const gastosSc: string[] = [];
+  const corteReporteGastosApp = new Date(2026, 6, 1);
+
+  const agregarGasto = (ruta: string, concepto: string, semKey: any, monto: number) => {
+    if (!ruta || !concepto || !semKey || monto <= 0) return;
+    if (!gastosSc.includes(ruta)) gastosSc.push(ruta);
+    if (!gastosTipos.includes(concepto)) gastosTipos.push(concepto);
+    if (!gastosOtros[ruta]) gastosOtros[ruta] = {};
+    if (!gastosOtros[ruta][concepto]) gastosOtros[ruta][concepto] = {};
+    gastosOtros[ruta][concepto][semKey] = (gastosOtros[ruta][concepto][semKey] || 0) + monto;
+  };
 
   if (wsGastos) {
     const gasRows = XLSX.utils.sheet_to_json<any[]>(wsGastos, { header: 1 });
@@ -574,6 +586,8 @@ export async function cargarDatos(cacheKey = "") {
       if (!row) continue;
       
       const dtObj = parseExcelDate(row[0]);
+      // La hoja anterior conserva únicamente el histórico hasta junio de 2026.
+      if (dtObj && dtObj >= corteReporteGastosApp) continue;
       let semKey = null;
       if (dtObj) {
           const wStart = new Date(dtObj);
@@ -595,19 +609,88 @@ export async function cargarDatos(cacheKey = "") {
           finalSc = scUpper;
       }
       
-      if (finalSc && !gastosSc.includes(finalSc)) gastosSc.push(finalSc);
-
       for (const gc of gastoCols) {
          const monto = sv(row[gc.idx]);
          if (monto > 0) {
             const concepto = _conceptoGasto(gc.h, scDetalle);
-            if (!gastosTipos.includes(concepto)) gastosTipos.push(concepto);
-            
-            if (!gastosOtros[finalSc]) gastosOtros[finalSc] = {};
-            if (!gastosOtros[finalSc][concepto]) gastosOtros[finalSc][concepto] = {};
-            gastosOtros[finalSc][concepto][semKey] = (gastosOtros[finalSc][concepto][semKey] || 0) + monto;
+            agregarGasto(finalSc, concepto, semKey, monto);
          }
       }
+    }
+  }
+
+  // Desde julio de 2026, Otros Gastos se obtiene de REPORTE-GASTOSAPP.
+  // Columnas utilizadas: Tienda, Fecha del Gasto, Categoria y Monto.
+  if (wsReporteGastosApp) {
+    const appRows = XLSX.utils.sheet_to_json<any[]>(wsReporteGastosApp, { header: 1 });
+    const normalizar = (value: any) => String(value || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+    const parseFechaGastoApp = (value: any) => {
+      // La app que alimenta esta hoja guarda las fechas numéricas con día/mes
+      // intercambiados (p. ej. 09/07 termina internamente como 07/09).
+      if (typeof value === 'number') {
+        const excelDate = new Date(Math.round((value - 25569) * 86400 * 1000));
+        if (isNaN(excelDate.getTime())) return null;
+        const day = excelDate.getUTCMonth() + 1;
+        const month = excelDate.getUTCDate();
+        const year = excelDate.getUTCFullYear();
+        const corrected = new Date(year, month - 1, day);
+        if (corrected.getFullYear() === year && corrected.getMonth() === month - 1 && corrected.getDate() === day) return corrected;
+        return null;
+      }
+      if (typeof value === 'string') {
+        const match = value.trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+        if (match) {
+          const day = Number(match[1]);
+          const month = Number(match[2]);
+          const year = Number(match[3]);
+          const parsed = new Date(year, month - 1, day);
+          if (parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day) return parsed;
+          return null;
+        }
+      }
+      return parseExcelDate(value);
+    };
+    const appHeaders = (appRows[0] || []).map(normalizar);
+    const idxAppTienda = appHeaders.indexOf('TIENDA');
+    const idxAppFechaGasto = appHeaders.indexOf('FECHA DEL GASTO');
+    const idxAppCategoria = appHeaders.indexOf('CATEGORIA');
+    const idxAppMonto = appHeaders.indexOf('MONTO');
+
+    const rutaDesdeTienda = (value: any) => {
+      const raw = String(value || '').trim();
+      const key = normalizar(raw).replace(/\s+/g, ' ');
+      if (key === 'MEXICALI' || key === 'MXL' || key === 'MXL 1' || key === 'MXL1') return 'MXL 1';
+      if (key === 'RUTA 2000' || key === 'RUTA2000') return 'Ruta 2000';
+      if (key === 'RUTAS PLAYAS' || key === 'RUTA PLAYAS' || key === 'PLAYAS') return 'Rutas Playas';
+      if (key === 'ENS' || key === 'ENSENADA') return 'ENS';
+      return raw;
+    };
+
+    if (idxAppTienda >= 0 && idxAppFechaGasto >= 0 && idxAppCategoria >= 0 && idxAppMonto >= 0) {
+      for (let i = 1; i < appRows.length; i++) {
+        const row = appRows[i];
+        if (!row) continue;
+
+        const fechaGasto = parseFechaGastoApp(row[idxAppFechaGasto]);
+        // Ignorar registros de junio aunque se hayan capturado durante julio.
+        if (!fechaGasto || fechaGasto < corteReporteGastosApp) continue;
+
+        const monto = sv(row[idxAppMonto]);
+        if (monto <= 0) continue;
+
+        const ruta = rutaDesdeTienda(row[idxAppTienda]);
+        const categoria = normalizar(row[idxAppCategoria]);
+        if (!ruta || !categoria) continue;
+
+        const wStart = new Date(fechaGasto);
+        wStart.setDate(wStart.getDate() - wStart.getDay());
+        const semKey = weekStartsToSemana[formatDateYMD(wStart)];
+        if (!semKey) continue;
+
+        agregarGasto(ruta, categoria, semKey, monto);
+      }
+    } else {
+      console.warn('REPORTE-GASTOSAPP no contiene las columnas requeridas: Tienda, Fecha del Gasto, Categoria y Monto.');
     }
   }
 
