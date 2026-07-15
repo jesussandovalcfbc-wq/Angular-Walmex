@@ -96,7 +96,6 @@ app.post('/api/upload-excel/start', async (req, res) => {
     activeImportId = uploadId;
     res.json({ uploadId, totalRows, chunkSize: 500, tableName: context.tableName });
   } catch (e: any) {
-    console.error('Error al iniciar importación:', e);
     res.status(500).json({ error: e.message || 'No se pudo iniciar la importación.' });
   }
 });
@@ -116,7 +115,6 @@ app.post('/api/upload-excel/chunk', async (req, res) => {
     active.lastActivity = Date.now();
     res.json({ writtenThrough, totalRows: active.context.totalRows });
   } catch (e: any) {
-    console.error('Error al escribir bloque de importación:', e);
     res.status(500).json({ error: e.message || 'No se pudo escribir el bloque.' });
   }
 });
@@ -147,7 +145,6 @@ app.post('/api/upload-excel/finish', async (req, res) => {
       refreshed,
     });
   } catch (e: any) {
-    console.error('Error al finalizar importación:', e);
     res.status(500).json({ error: e.message || 'No se pudo finalizar la importación.' });
   }
 });
