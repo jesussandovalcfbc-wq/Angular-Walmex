@@ -48,8 +48,8 @@
 <div style="display:none">Semana  <strong id="hdrSem">—</strong></div>
 </div>
 <div style="position: relative; display: inline-block;">
-  <input type="file" #fileInput (change)="onFileSelected($event); uploadFile()" [disabled]="isUploading" accept=".xlsx,.xlsm,.xls" style="display: none;">
-  <button class="btn-print btn-import" (click)="fileInput.click()" [disabled]="isUploading" title="Importar datos semanales">{{ isUploading ? 'Importando...' : 'Importar' }}</button>
+  <input type="file" #fileInput (change)="onFileSelected($event); uploadFile()" accept=".xlsx,.xlsm,.xls" style="display: none;">
+  <button class="btn-print btn-import" (click)="fileInput.click()" title="Importar datos semanales">Importar</button>
   @if (uploadStatus) {
     <div style="position: absolute; top: 100%; right: 0; background: #e0f2f1; color: #00695c; padding: 4px 8px; border-radius: 4px; font-size: 10px; margin-top: 4px; white-space: nowrap; z-index: 1000; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
       {{ uploadStatus }}

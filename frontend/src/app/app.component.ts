@@ -1,9 +1,7 @@
 import { Component, AfterViewInit, ViewEncapsulation, OnDestroy } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
-import { forkJoin, lastValueFrom } from 'rxjs';
-import { extractExcelUploadRows } from './excel-import';
-import type { ExcelUploadCell } from './excel-import';
+import { forkJoin } from 'rxjs';
 
 @Component({
   selector: 'app-root',
@@ -20,9 +18,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     : 'https://walmex-api.onrender.com/api';
 
   selectedFile: File | null = null;
-  private selectedFileInput: HTMLInputElement | null = null;
   uploadStatus: string = '';
-  isUploading: boolean = false;
   isChatOpen: boolean = false;
   isResumenTab: boolean = false;
 
@@ -118,85 +114,22 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   // ── Chat y archivo ────────────────────────────────────────────────────
   toggleChat() { this.isChatOpen = !this.isChatOpen; }
 
-  onFileSelected(event: Event) {
-    const input = event.target as HTMLInputElement;
-    this.selectedFileInput = input;
-    this.selectedFile = input.files?.[0] || null;
-  }
+  onFileSelected(event: any) { this.selectedFile = event.target.files[0]; }
 
-  async uploadFile() {
-    if (!this.selectedFile || this.isUploading) return;
-
-    this.isUploading = true;
-    let uploadId = '';
-    try {
-      this.uploadStatus = 'Preparando archivo...';
-      const rows = extractExcelUploadRows(await this.selectedFile.arrayBuffer());
-      this.uploadStatus = `Validando ${rows.length.toLocaleString('es-MX')} filas...`;
-
-      const start = await lastValueFrom(this.http.post<any>(`${this.apiUrl}/upload-excel/start`, {
-        totalRows: rows.length,
-        header: rows[0],
-        fileName: this.selectedFile.name,
-      }));
-      uploadId = start.uploadId;
-      const chunkSize = Math.min(500, Number(start.chunkSize) || 500);
-
-      for (let offset = 0; offset < rows.length; offset += chunkSize) {
-        const chunk = rows.slice(offset, offset + chunkSize);
-        await this.sendChunkWithRetry(uploadId, offset + 1, chunk);
-        const completed = Math.min(offset + chunk.length, rows.length);
-        const percent = Math.round((completed / rows.length) * 100);
-        this.uploadStatus = `Importando ${completed.toLocaleString('es-MX')} de ${rows.length.toLocaleString('es-MX')} filas — ${percent}%`;
-      }
-
-      this.uploadStatus = 'Finalizando y actualizando datos...';
-      const result = await lastValueFrom(this.http.post<any>(`${this.apiUrl}/upload-excel/finish`, { uploadId }));
-      uploadId = '';
-      this.uploadStatus = result.refreshed === false
-        ? `Importación completa: ${result.rowCount.toLocaleString('es-MX')} filas. Actualiza la página en un momento.`
-        : `Importación completa: ${result.rowCount.toLocaleString('es-MX')} filas.`;
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (error: any) {
-      if (uploadId) {
-        await lastValueFrom(
-          this.http.post(`${this.apiUrl}/upload-excel/cancel`, { uploadId }),
-        ).catch(() => undefined);
-      }
-      this.uploadStatus = `Error: ${this.getUploadError(error)}`;
-    } finally {
-      this.isUploading = false;
-      this.selectedFile = null;
-      if (this.selectedFileInput) this.selectedFileInput.value = '';
-      this.selectedFileInput = null;
-    }
-  }
-
-  private async sendChunkWithRetry(
-    uploadId: string,
-    startRow: number,
-    rows: ExcelUploadCell[][],
-  ): Promise<void> {
-    let lastError: unknown;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        await lastValueFrom(this.http.post(`${this.apiUrl}/upload-excel/chunk`, {
-          uploadId,
-          startRow,
-          rows,
-        }));
-        return;
-      } catch (error) {
-        lastError = error;
-        if (attempt < 3) await new Promise(resolve => setTimeout(resolve, attempt * 1_000));
-      }
-    }
-    throw lastError;
-  }
-
-  private getUploadError(error: any): string {
-    if (error?.error?.error) return error.error.error;
-    if (error?.status === 0) return 'La conexión con Render se interrumpió. Intenta nuevamente.';
-    return error?.message || 'No se pudo importar el archivo.';
+  uploadFile() {
+    if (!this.selectedFile) { this.uploadStatus = '⚠️ Selecciona un archivo Excel primero'; return; }
+    this.uploadStatus = '🔄 Subiendo datos a SharePoint...';
+    const reader = new FileReader();
+    reader.readAsDataURL(this.selectedFile);
+    reader.onload = () => {
+      const base64Content = (reader.result as string).split(',')[1];
+      this.http.post(`${this.apiUrl}/upload-excel`, {
+        content: base64Content,
+        fileName: this.selectedFile?.name
+      }).subscribe({
+        next: (res: any) => { this.uploadStatus = `✓ Éxito: ${res.message}`; setTimeout(() => window.location.reload(), 1500); },
+        error: (err) => { this.uploadStatus = `✕ Error: ${err.error?.error || err.message || 'Error al importar el archivo'}`; }
+      });
+    };
   }
 }
