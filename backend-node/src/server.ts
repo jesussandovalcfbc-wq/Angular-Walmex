@@ -1,31 +1,18 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { randomUUID } from 'crypto';
 dotenv.config();
 
 import { getSupabaseData, getDevolucionesData } from './supabase';
 import { cargarDatos, cargarGasolina, cargarNomina, invalidateDashboardCache } from './data_processing';
-import {
-  cancelChunkedSharepointImport,
-  finishChunkedSharepointImport,
-  startChunkedSharepointImport,
-  writeSharepointImportChunk,
-} from './sharepoint';
-import type { SharepointChunkImport } from './sharepoint';
+import { uploadExcelToSharepoint } from './sharepoint';
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '8mb' }));
+app.use(express.json({ limit: '50mb' }));
 
 let GLOBAL_DATA: any = null;
-type ActiveImport = {
-  context: SharepointChunkImport;
-  lastActivity: number;
-};
-const activeImports = new Map<string, ActiveImport>();
-let activeImportId: string | null = null;
-const IMPORT_EXPIRATION_MS = 20 * 60 * 1000;
+let uploadInProgress = false;
 
 async function initData() {
   console.log("Loading dashboard data...");
@@ -77,92 +64,34 @@ app.get('/api/devoluciones', async (req, res) => {
   }
 });
 
-app.post('/api/upload-excel/start', async (req, res) => {
+app.post('/api/upload-excel', async (req, res) => {
+  if (uploadInProgress) {
+    return res.status(409).json({ error: 'Ya hay una importación en proceso. Espera a que termine.' });
+  }
+
+  uploadInProgress = true;
   try {
-    if (activeImportId) {
-      const active = activeImports.get(activeImportId);
-      if (active && Date.now() - active.lastActivity < IMPORT_EXPIRATION_MS) {
-        return res.status(409).json({ error: 'Ya hay una importación en proceso. Espera a que termine.' });
-      }
-      if (active) await cancelChunkedSharepointImport(active.context);
-      activeImports.delete(activeImportId);
-      activeImportId = null;
+    const { content } = req.body;
+    if (typeof content !== 'string' || !content.trim()) {
+      return res.status(400).json({ error: 'No se recibió el contenido del archivo Excel.' });
     }
 
-    const totalRows = Number(req.body?.totalRows);
-    const context = await startChunkedSharepointImport(totalRows, req.body?.header);
-    const uploadId = randomUUID();
-    activeImports.set(uploadId, { context, lastActivity: Date.now() });
-    activeImportId = uploadId;
-    res.json({ uploadId, totalRows, chunkSize: 500, tableName: context.tableName });
-  } catch (e: any) {
-    console.error('Error al iniciar importación:', e);
-    res.status(500).json({ error: e.message || 'No se pudo iniciar la importación.' });
-  }
-});
-
-app.post('/api/upload-excel/chunk', async (req, res) => {
-  try {
-    const uploadId = String(req.body?.uploadId || '');
-    const active = activeImports.get(uploadId);
-    if (!active || uploadId !== activeImportId) {
-      return res.status(404).json({ error: 'La sesión de importación ya no está disponible.' });
-    }
-    const writtenThrough = await writeSharepointImportChunk(
-      active.context,
-      Number(req.body?.startRow),
-      req.body?.rows,
-    );
-    active.lastActivity = Date.now();
-    res.json({ writtenThrough, totalRows: active.context.totalRows });
-  } catch (e: any) {
-    console.error('Error al escribir bloque de importación:', e);
-    res.status(500).json({ error: e.message || 'No se pudo escribir el bloque.' });
-  }
-});
-
-app.post('/api/upload-excel/finish', async (req, res) => {
-  const uploadId = String(req.body?.uploadId || '');
-  const active = activeImports.get(uploadId);
-  if (!active || uploadId !== activeImportId) {
-    return res.status(404).json({ error: 'La sesión de importación ya no está disponible.' });
-  }
-  try {
-    await finishChunkedSharepointImport(active.context);
-    activeImports.delete(uploadId);
-    activeImportId = null;
+    const fileBuffer = Buffer.from(content, 'base64');
+    const rowCount = await uploadExcelToSharepoint(fileBuffer);
 
     invalidateDashboardCache();
-    let refreshed = true;
-    try {
-      const refreshedMainData = await cargarDatos();
-      GLOBAL_DATA = { ...(GLOBAL_DATA || {}), ...refreshedMainData };
-    } catch (refreshError) {
-      refreshed = false;
-      console.error('La importación terminó, pero no se pudo refrescar el dashboard:', refreshError);
-    }
+    const refreshedMainData = await cargarDatos();
+    GLOBAL_DATA = { ...(GLOBAL_DATA || {}), ...refreshedMainData };
+
     res.json({
-      message: `¡Listo! ${active.context.totalRows} filas escritas en SharePoint (Tabla4).`,
-      rowCount: active.context.totalRows,
-      refreshed,
+      message: `¡Listo! ${rowCount} filas escritas en SharePoint (hoja Data, A→AS).`,
+      rowCount,
     });
   } catch (e: any) {
-    console.error('Error al finalizar importación:', e);
-    res.status(500).json({ error: e.message || 'No se pudo finalizar la importación.' });
+    res.status(500).json({ error: e.message });
+  } finally {
+    uploadInProgress = false;
   }
-});
-
-app.post('/api/upload-excel/cancel', async (req, res) => {
-  const uploadId = String(req.body?.uploadId || '');
-  const active = activeImports.get(uploadId);
-  if (active) await cancelChunkedSharepointImport(active.context);
-  activeImports.delete(uploadId);
-  if (activeImportId === uploadId) activeImportId = null;
-  res.status(204).send();
-});
-
-app.post('/api/upload-excel', (_req, res) => {
-  res.status(410).json({ error: 'Actualiza la página para utilizar la importación por bloques.' });
 });
 
 const PORT = process.env.PORT || 8000;
