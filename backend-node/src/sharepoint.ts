@@ -332,8 +332,14 @@ export async function startChunkedSharepointImport(
       { headers: context.sessionHeaders },
       30_000,
     );
-    const tableRange = await tableRangeRes.json() as { rowCount?: number };
+    const tableRange = await tableRangeRes.json() as { rowCount?: number; columnCount?: number };
     const currentTableRows = Math.max(1, Number(tableRange.rowCount) || 1);
+    const tableColumnCount = Math.max(0, Number(tableRange.columnCount) || 0);
+    if (tableColumnCount < IMPORT_COLUMN_COUNT) {
+      throw new Error(
+        `Tabla4 contiene ${tableColumnCount} columnas y la importación requiere al menos ${IMPORT_COLUMN_COUNT} (A:AS).`,
+      );
+    }
 
     if (totalRows > currentTableRows) {
       let rowsToAdd = totalRows - currentTableRows;
@@ -341,17 +347,24 @@ export async function startChunkedSharepointImport(
         const count = Math.min(IMPORT_CHUNK_LIMIT, rowsToAdd);
         const blankRows = Array.from(
           { length: count },
-          () => Array<SharepointCell>(IMPORT_COLUMN_COUNT).fill(''),
+          // Tabla4 puede incluir columnas calculadas después de AS. Graph exige
+          // que cada fila nueva tenga exactamente el ancho completo de la tabla.
+          () => Array<SharepointCell>(tableColumnCount).fill(''),
         );
-        await graphRequestWithRetry(
-          `${workbookUrl}/tables/${encodedTableName}/rows/add`,
-          {
-            method: 'POST',
-            headers: context.sessionHeaders,
-            body: JSON.stringify({ index: null, values: blankRows }),
-          },
-          120_000,
-        );
+        try {
+          await graphRequestWithRetry(
+            `${workbookUrl}/tables/${encodedTableName}/rows/add`,
+            {
+              method: 'POST',
+              headers: context.sessionHeaders,
+              body: JSON.stringify({ index: null, values: blankRows }),
+            },
+            120_000,
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new Error(`No se pudo ampliar Tabla4 a su ancho real de ${tableColumnCount} columnas: ${message}`);
+        }
         rowsToAdd -= count;
       }
     }
@@ -393,15 +406,20 @@ export async function writeSharepointImportChunk(
     throw new Error('El bloque supera el total de filas declarado.');
   }
 
-  await graphRequestWithRetry(
-    `${context.workbookUrl}/worksheets/Data/range(address='A${startRow}:AS${endRow}')`,
-    {
-      method: 'PATCH',
-      headers: context.sessionHeaders,
-      body: JSON.stringify({ values: rows }),
-    },
-    120_000,
-  );
+  try {
+    await graphRequestWithRetry(
+      `${context.workbookUrl}/worksheets/Data/range(address='A${startRow}:AS${endRow}')`,
+      {
+        method: 'PATCH',
+        headers: context.sessionHeaders,
+        body: JSON.stringify({ values: rows }),
+      },
+      120_000,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`No se pudo escribir el rango A${startRow}:AS${endRow}: ${message}`);
+  }
   context.nextRow = endRow + 1;
   return endRow;
 }
