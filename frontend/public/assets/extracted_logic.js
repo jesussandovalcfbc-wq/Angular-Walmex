@@ -5204,7 +5204,7 @@ function renderResumen(){
       var td1 = document.createElement('td');
       td1.setAttribute('data-group', id1);
       td1.style.cssText = 'position:static;background:'+bg+';padding:3px 6px;white-space:nowrap;font-size:14px;font-weight:600;color:#1565c0;border-right:1px solid #e0e6f0;text-align:left;vertical-align:middle';
-      td1.innerHTML = '<span style="font-size:12px;color:#1565c0">Capture SEM</span><div style="font-size:12px;font-weight:bold;color:#1a3a5c;margin-top:2px;background:#ddeeff;display:inline-block;border-radius:3px;padding:1px 6px"><input type="text" id="csem_'+r1i+'_'+r2i+'_'+wi+'" placeholder="SEM" value="'+(window._nextSemanaProyeccion||'')+'" readonly style="width:50px;border:2px solid #2980b9;border-radius:4px;padding:2px 4px;font-size:13px;text-align:center;background:#eef6fc;color:#0a2a4a;font-weight:bold;outline:none;cursor:not-allowed;"></div><button type="button" title="Eliminar fila" onclick="window.removeCaptureSemRow('+r1i+','+r2i+','+wi+','+ngr+')" style="margin-left:3px;font-size:11px;font-weight:bold;background:#c62828;color:#fff;border:none;border-radius:3px;padding:1px 5px;cursor:pointer;vertical-align:middle">×</button>';
+      td1.innerHTML = '<span style="font-size:13px;font-weight:bold;color:#1565c0">Capture SEM</span><input type="text" id="csem_'+r1i+'_'+r2i+'_'+wi+'" value="'+(window._nextSemanaProyeccion||'')+'" readonly style="width:30px;border:none;background:transparent;color:#0a2a4a;font-size:15px;font-weight:900;text-align:center;outline:none;cursor:default;margin-left:4px;"><button type="button" title="Eliminar fila" onclick="window.removeCaptureSemRow('+r1i+','+r2i+','+wi+','+ngr+')" style="margin-left:6px;font-size:11px;font-weight:bold;background:#c62828;color:#fff;border:none;border-radius:3px;padding:1px 5px;cursor:pointer;vertical-align:middle">×</button>';
       tr.appendChild(td1);
       /* Inputs por día */
       dayGroups.forEach(function(group, gi){
@@ -5571,7 +5571,7 @@ function renderResumen(){
               /* Values cell: Capture SEM en todas las filas */
               capRow += '<td data-group="'+id1+'" style="position:static;background:'+capBg+';padding:3px 6px;white-space:nowrap;font-size:14px;font-weight:600;color:#1565c0;border-right:1px solid #e0e6f0;text-align:left;vertical-align:middle">';
               capRow += '<span style="font-size:12px;color:#1565c0">Capture SEM</span>';
-              capRow += '<div style="font-size:12px;font-weight:bold;color:#1a3a5c;margin-top:2px;background:#ddeeff;display:inline-block;border-radius:3px;padding:1px 6px"><input type="text" id="csem_'+i1+'_'+r2i+'_'+wi+'" placeholder="SEM" value="'+(window._nextSemanaProyeccion||'')+'" oninput="window.syncCaptureProjFromBlock('+i1+','+r2i+')" style="width:50px;border:2px solid #2980b9;border-radius:4px;padding:2px 4px;font-size:13px;text-align:center;background:#eef6fc;color:#0a2a4a;font-weight:bold;outline:none"></div>';
+              capRow += '<input type="text" id="csem_'+i1+'_'+r2i+'_'+wi+'" value="'+(window._nextSemanaProyeccion||'')+'" readonly style="width:30px;border:none;background:transparent;color:#0a2a4a;font-size:15px;font-weight:900;text-align:center;outline:none;cursor:default;margin-left:4px;">';
               capRow += '</td>';
               dayGroups.forEach(function(group, gi){
                 /* Siempre mostrar input, independientemente de si hay dato */
@@ -5864,7 +5864,7 @@ function renderResumen(){
     var td1 = document.createElement('td');
     td1.setAttribute('data-group', tr.getAttribute('data-group'));
     td1.style.cssText = 'background:'+bg+';padding:3px 6px;white-space:nowrap;font-size:14px;font-weight:600;color:#1565c0;border-right:1px solid #e0e6f0;text-align:left;vertical-align:middle';
-    td1.innerHTML = '<span style="font-size:12px;color:#1565c0">Capture SEM</span><div style="font-size:12px;font-weight:bold;color:#1a3a5c;margin-top:2px;background:#ddeeff;display:inline-block;border-radius:3px;padding:1px 6px"><input type="text" id="csem_'+r1i+'_'+r2i+'_'+rowi+'" placeholder="SEM" value="'+(window._nextSemanaProyeccion||'')+'" readonly style="width:50px;border:2px solid #2980b9;border-radius:4px;padding:2px 4px;font-size:13px;text-align:center;background:#eef6fc;color:#0a2a4a;font-weight:bold;outline:none;cursor:not-allowed"></div><button type="button" title="Eliminar fila" onclick="window.removeCaptureNormalRow('+r1i+','+r2i+','+rowi+','+ncols+')" style="margin-left:3px;font-size:11px;font-weight:bold;background:#c62828;color:#fff;border:none;border-radius:3px;padding:1px 5px;cursor:pointer;vertical-align:middle">×</button>';
+    td1.innerHTML = '<span style="font-size:13px;font-weight:bold;color:#1565c0">Capture SEM</span><input type="text" id="csem_'+r1i+'_'+r2i+'_'+rowi+'" value="'+(window._nextSemanaProyeccion||'')+'" readonly style="width:30px;border:none;background:transparent;color:#0a2a4a;font-size:15px;font-weight:900;text-align:center;outline:none;cursor:default;margin-left:4px;"><button type="button" title="Eliminar fila" onclick="window.removeCaptureNormalRow('+r1i+','+r2i+','+rowi+','+ncols+')" style="margin-left:6px;font-size:11px;font-weight:bold;background:#c62828;color:#fff;border:none;border-radius:3px;padding:1px 5px;cursor:pointer;vertical-align:middle">×</button>';
     tr.appendChild(td1);
     for(var ci=0; ci<ncols; ci++){
       var td = document.createElement('td');
@@ -6147,7 +6147,7 @@ function renderResumen(){
           var capRow2 = '<tr data-group="'+id1+'" data-capture-initial="1" style="display:none;background:'+ncapBg+';border-top:1px dashed #64a8d8">';
           capRow2 += '<td data-group="'+id1+'" style="background:'+ncapBg+';padding:3px 6px;white-space:nowrap;font-size:14px;font-weight:600;color:#1565c0;border-right:1px solid #e0e6f0;text-align:left;vertical-align:middle">';
           capRow2 += '<span style="font-size:12px;color:#1565c0">Capture SEM</span>';
-          capRow2 += '<div style="font-size:12px;font-weight:bold;color:#1a3a5c;margin-top:3px;background:#ddeeff;display:inline-block;border-radius:3px;padding:1px 6px"><input type="text" id="csem_'+i1+'_'+r2i+'_0" placeholder="SEM" value="'+(window._nextSemanaProyeccion||'')+'" oninput="window.syncCaptureProjFromBlock('+i1+','+r2i+')" style="width:50px;border:2px solid #2980b9;border-radius:4px;padding:2px 4px;font-size:13px;text-align:center;background:#eef6fc;color:#0a2a4a;font-weight:bold;outline:none"></div>';
+          capRow2 += '<input type="text" id="csem_'+i1+'_'+r2i+'_0" value="'+(window._nextSemanaProyeccion||'')+'" readonly style="width:30px;border:none;background:transparent;color:#0a2a4a;font-size:15px;font-weight:900;text-align:center;outline:none;cursor:default;margin-left:4px;">';
           capRow2 += '</td>';
           pivot.columns.forEach(function(col, ci){
             var inputId2 = 'cin_'+i1+'_'+r2i+'_0_'+ci;

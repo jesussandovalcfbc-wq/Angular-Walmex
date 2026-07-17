@@ -385,9 +385,32 @@
   #btnAddCaptureSem { border-color:#1d4ed8 !important; background:linear-gradient(135deg,#2563eb,#1d4ed8) !important; color:#fff !important; }
   #btnRemoveCaptureSem { background:#fff5f5 !important; border-color:#fecaca !important; color:#b91c1c !important; }
   #btnRemoveCaptureSem:disabled { opacity:.45 !important; cursor:not-allowed !important; }
-  #btnSaveCaptureAll { width:28px; padding:0 !important; border-color:#047857 !important; background:#059669 !important; color:#fff !important; }
-  #btnClearCapture { width:28px; padding:0 !important; background:#fff5f5 !important; border-color:#fecaca !important; color:#dc2626 !important; }
+
   #btnToggleTotalPos { border-color:#334155 !important; background:#334155 !important; color:#fff !important; }
+
+  /* Filtros EMB/POS/THRU estilo WebDataRocks (igual a Producto/Tienda) */
+  #metricFilters { display:inline-flex; align-items:center; gap:2px; }
+  #metricFilters .mode-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 23px !important;
+    padding: 2px 8px !important;
+    border: 1px solid #8ba0bc !important;
+    border-radius: 0 !important;
+    background: linear-gradient(to bottom,#fbfdff 0%,#e9f2fc 52%,#d8e7f7 100%) !important;
+    color: #173b67 !important;
+    font: 400 11px Verdana, Geneva, sans-serif !important;
+    letter-spacing: 0 !important;
+    cursor: pointer !important;
+    user-select: none !important;
+    box-shadow: none !important;
+  }
+  #metricFilters .mode-btn.active {
+    border-color: #5f82a9 !important;
+    background: linear-gradient(to bottom,#f5faff 0%,#dcebf9 52%,#c9ddf2 100%) !important;
+  }
+
   #btnExportCapture { border-color:#047857 !important; background:linear-gradient(135deg,#059669,#047857) !important; color:#fff !important; }
   #btnPivotProducto, #btnPivotTienda { min-width:62px; background:#fff !important; color:#334155 !important; }
   #btnPivotProducto.active, #btnPivotTienda.active { border-color:#60a5fa !important; background:#2563eb !important; color:#fff !important; }
@@ -397,43 +420,19 @@
     position:relative;
     min-width:92px !important;
     height:23px !important;
-    justify-content:flex-start !important;
+    justify-content:center !important;
     border:1px solid #8ba0bc !important;
     border-radius:0 !important;
     background:linear-gradient(to bottom,#fbfdff 0%,#e9f2fc 52%,#d8e7f7 100%) !important;
-    padding:2px 28px 2px 8px !important;
+    padding:2px 8px !important;
     box-shadow:none !important;
     color:#173b67 !important;
     font:400 11px Verdana, Geneva, sans-serif !important;
     letter-spacing:0 !important;
-    text-align:left !important;
+    text-align:center !important;
     transform:none !important;
   }
-  #resumenTitle #btnPivotProducto::before,
-  #resumenTitle #btnPivotTienda::before,
-  #resumenTitle #btnResumenAnalisis::before {
-    position:absolute;
-    top:7px;
-    right:17px;
-    width:0;
-    height:0;
-    border-right:3px solid transparent;
-    border-bottom:4px solid #35597d;
-    border-left:3px solid transparent;
-    content:"";
-  }
-  #resumenTitle #btnPivotProducto::after,
-  #resumenTitle #btnPivotTienda::after,
-  #resumenTitle #btnResumenAnalisis::after {
-    position:absolute;
-    top:6px;
-    right:5px;
-    width:8px;
-    height:9px;
-    background:#35597d;
-    clip-path:polygon(0 0,100% 0,62% 45%,62% 100%,38% 100%,38% 45%);
-    content:"";
-  }
+
   #resumenTitle #btnPivotProducto:hover,
   #resumenTitle #btnPivotTienda:hover,
   #resumenTitle #btnResumenAnalisis:hover,
@@ -473,20 +472,7 @@
     width:19px;
     height:19px;
   }
-  #metricFilters {
-    display:inline-flex !important;
-    height:26px;
-    align-items:center !important;
-    gap:6px !important;
-    border:1px solid #cbd5e1 !important;
-    border-radius:5px !important;
-    background:#f1f5f9 !important;
-    padding:0 7px !important;
-    color:#334155 !important;
-    font-size:10px !important;
-  }
-  #metricFilters label { gap:2px !important; font-weight:650; }
-  #metricFilters input { width:12px; height:12px; accent-color:#38bdf8; }
+
 
   #btnResumenAnalisis { min-width:66px; background:#fff !important; color:#334155 !important; }
   #btnResumenAnalisis.active { border-color:#0f5bd8 !important; background:#0f5bd8 !important; color:#fff !important; }
