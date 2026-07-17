@@ -379,10 +379,10 @@
 <label style="cursor:pointer; display:flex; align-items:center; gap:2px;" title="Ventas POS"><input checked="" onclick="if(document.querySelectorAll('#metricFilters input:checked').length===0) return false; if(typeof renderResumen==='function') renderResumen()" type="checkbox" value="ventas"/> POS</label>
 <label style="cursor:pointer; display:flex; align-items:center; gap:2px;" title="Sell Thru"><input checked="" onclick="if(document.querySelectorAll('#metricFilters input:checked').length===0) return false; if(typeof renderResumen==='function') renderResumen()" type="checkbox" value="sell_thru"/> Thru</label>
 </div>
-<button id="btnExportCapture" onclick="window.exportCaptureData()" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;background:#107c41;color:#fff;border:none;border-radius:6px;padding:4px 11px;cursor:pointer;letter-spacing:.02em;" title="Exportar captura"><span class="material-icons" style="font-size:16px">download</span> Exportar</button>
+<button id="btnExportCapture" onclick="window.exportCaptureData()" aria-label="Exportar captura" style="display:inline-flex;align-items:center;justify-content:center;cursor:pointer;" title="Exportar captura a Excel"><svg class="resumen-xls-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2.5h9l4 4V21.5H7z" fill="#f7fbfa" stroke="#55786f"/><path d="M16 2.5v4h4" fill="#dcece7" stroke="#55786f"/><path d="M10 9h7M10 12h7M10 15h7M10 18h7M13.5 9v9" fill="none" stroke="#9fc9bc" stroke-width=".8"/><rect x="2.5" y="7" width="10" height="11" rx=".5" fill="#107c41" stroke="#075c31"/><path d="m5 10 1.45 2.45L5 15h1.65l.72-1.42L8.1 15h1.7l-1.5-2.57L9.7 10H8.08l-.66 1.3-.68-1.3z" fill="#fff"/></svg></button>
 <button class="mode-btn active" id="btnPivotProducto" onclick="setResumenPivot('producto')">Producto</button>
 <button class="mode-btn" id="btnPivotTienda" onclick="setResumenPivot('tienda')">Tienda</button>
-<button class="mode-btn active" id="btnResumenAnalisis" onclick="toggleResumenAnalisis()">Análisis</button>
+<button class="mode-btn" id="btnResumenAnalisis" onclick="openResumenAnalisisTab()">Análisis</button>
 </div>
 </div>
 <div class="resumen-table-wrap">
@@ -392,8 +392,16 @@
 </table>
 </div>
 </div>
-<aside class="resumen-analysis-panel" id="resumenAnalysisPanel">
+<aside aria-hidden="true" aria-labelledby="resumenAnalysisDialogTitle" aria-modal="true" class="resumen-analysis-panel" id="resumenAnalysisPanel" onclick="if(event.target===this) toggleResumenAnalisis(false)" role="dialog" style="display:none;">
+<div class="resumen-analysis-dialog">
+<div class="resumen-analysis-dialog-header">
+<div>
+<h2 id="resumenAnalysisDialogTitle">Análisis de ventas</h2>
+</div>
+<button aria-label="Cerrar análisis" class="resumen-analysis-close" onclick="closeResumenAnalisisView()" title="Cerrar pestaña" type="button">&times;</button>
+</div>
 <div id="resumenAnalysisContent"></div>
+</div>
 </aside>
 <div class="box resumen-side-box" style="display:none;">
 <div class="box-hdr" style="display:flex; justify-content:space-between; align-items:center;">
