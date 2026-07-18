@@ -1171,6 +1171,30 @@
   .analysis-pivot-store-total td { background:#dfeaf6 !important; font-weight:700 !important; border-top:1px solid #789bc2 !important; }
   .analysis-pivot-store-total td:first-child { color:#173b67; }
   .analysis-pivot-total-label { background:#dfeaf6 !important; color:#173b67; font-weight:700 !important; }
+  .analysis-product-summary-heading td {
+    height:26px !important;
+    padding:5px 9px !important;
+    background:linear-gradient(to bottom,#dce9f7 0,#cbdcf0 100%) !important;
+    border-top:2px solid #789bc2 !important;
+    border-bottom:1px solid #789bc2 !important;
+    color:#173b67 !important;
+    font-size:10px !important;
+    font-weight:700 !important;
+    letter-spacing:.04em;
+    text-align:left !important;
+    text-transform:uppercase;
+  }
+  .analysis-product-summary-label,
+  .analysis-product-summary-product {
+    background:linear-gradient(to bottom,#edf3fb 0,#e4eefa 20px,#e4eefa 100%) !important;
+    border-right:1px solid #abbacf !important;
+    border-bottom:1px solid #abbacf !important;
+    color:#173b67 !important;
+    font-weight:700 !important;
+  }
+  .analysis-product-summary-label { vertical-align:top !important; }
+  .analysis-product-summary-row td { border-bottom:1px solid #c4d9f6 !important; }
+  .analysis-product-summary-period { background:#e4eefa !important; color:#365f8d !important; }
   body.resumen-analysis-standalone .analysis-table th[data-field="product"] { min-width:170px; }
   body.resumen-analysis-standalone .analysis-table th[data-field="day"] { min-width:95px; }
   .analysis-drill-heading td {
