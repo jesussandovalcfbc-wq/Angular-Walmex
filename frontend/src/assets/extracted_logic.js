@@ -3189,7 +3189,7 @@ function saveAllCaptureRows() {
 }
 
 /* ── Helper: editar programado (cambia todos los valores de una fila) ── */
-function _editProgramadoRow(r1Key, r2Key, rowIdx, colIdx, modeKey) {
+function _editProgramadoRow(r1Key, r2Key, rowIdx, colIdx, modeKey, semVal) {
   var store = window._captureProjections && window._captureProjections[modeKey];
   if(!store) return;
   var pivotMode = state.resumenPivot || 'producto';
@@ -3199,7 +3199,21 @@ function _editProgramadoRow(r1Key, r2Key, rowIdx, colIdx, modeKey) {
   var entry = store[sk];
   if(!entry || !entry.rows) return;
   var savedRows = entry.rows.filter(function(r){ return r.saved; });
-  var row = savedRows[rowIdx];
+  var semKey = String(semVal || '').trim();
+  var row = null;
+  if(semKey){
+    row = savedRows.find(function(savedRow){
+      return String(savedRow.sem || '').trim() === semKey;
+    }) || null;
+  }
+  if(!row){
+    savedRows = savedRows.slice().sort(function(a,b){
+      var aParts = _resumenAnalysisWeekParts(a.sem);
+      var bParts = _resumenAnalysisWeekParts(b.sem);
+      return ((aParts.year * 100) + aParts.week) - ((bParts.year * 100) + bParts.week);
+    });
+    row = savedRows[rowIdx];
+  }
   if(!row) return;
   var nCols = row.values.length;
   if(colIdx >= 0 && colIdx < nCols){
@@ -3208,12 +3222,9 @@ function _editProgramadoRow(r1Key, r2Key, rowIdx, colIdx, modeKey) {
     if(newVal === null) return;
     row.values[colIdx] = String(Math.round(parseFloat(String(newVal).replace(/,/g,'')) || 0));
   } else {
-    var newSem = prompt('Editar Programado - Semana:', row.sem || '');
-    if(newSem === null) return;
-    var oldSem = row.sem;
-    row.sem = newSem;
-    if(oldSem !== newSem) _deleteRowFromSupabase(modeKey, prod, tienda, oldSem);
+    return;
   }
+  try { localStorage.setItem(_CAPTURE_LS_KEY, JSON.stringify(window._captureProjections)); } catch(e) {}
   _saveRowToSupabase(modeKey, prod, tienda, row.sem, row.values);
   if(typeof renderResumen === 'function') renderResumen();
 }
@@ -5736,7 +5747,7 @@ function renderResumen(){
             var fv = v !== '' ? fmt(parseFloat(v)||0) : '';
             pRow += '<td data-group="'+id1+'" style="font-size:14px;color:#e65100;background:'+progBg+';text-align:right;width:68px;min-width:68px;max-width:68px;padding:3px 8px;vertical-align:middle">'+
               (fv||'') +
-              '<button type="button" onclick="_editProgramadoRow(\''+r1Key+'\',\''+r2Key+'\','+progIdx+','+gi+',\'sem\')" style="margin-left:2px;font-size:10px;background:transparent;border:none;cursor:pointer;color:#1565c0">✏️</button>' +
+              '<button type="button" onclick="_editProgramadoRow(\''+r1Key+'\',\''+r2Key+'\','+progIdx+','+gi+',\'sem\',\''+(progRow.sem || '')+'\')" style="margin-left:2px;font-size:10px;background:transparent;border:none;cursor:pointer;color:#1565c0">✏️</button>' +
               '</td>';
           });
 
@@ -6339,7 +6350,7 @@ function renderResumen(){
           var fv = v !== '' ? fmt(parseFloat(v)||0) : '';
           pRow += '<td data-group="'+id1+'" style="font-size:14px;color:#e65100;background:'+progBg+';text-align:right;vertical-align:middle;width:68px;min-width:68px;max-width:68px;padding:3px 8px">'+
             (fv||'') +
-            '<button type="button" onclick="_editProgramadoRow(\''+r1Key+'\',\''+r2Key+'\','+progIdx+','+ci+',\'norm\')" style="margin-left:2px;font-size:10px;background:transparent;border:none;cursor:pointer;color:#1565c0">✏️</button>' +
+            '<button type="button" onclick="_editProgramadoRow(\''+r1Key+'\',\''+r2Key+'\','+progIdx+','+ci+',\'norm\',\''+(progRow.sem || '')+'\')" style="margin-left:2px;font-size:10px;background:transparent;border:none;cursor:pointer;color:#1565c0">✏️</button>' +
             '</td>';
         });
 
