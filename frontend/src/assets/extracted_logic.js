@@ -4962,6 +4962,21 @@ function renderResumenAnalysis(){
         }
       });
     });
+    if(isStoreTable && state.resumenAnalysisProductField){
+      var summaryProductRows = _resumenAnalysisRows(analysis.byProduct || {}, weeks, analysis.baselineKeys, analysis.currentKeys, analysis.mode !== 'day').filter(function(productRow){
+        return weeks.some(function(week){ return productRow.weekValues[week] !== 0; });
+      });
+      if(summaryProductRows.length){
+        body += '<tr class="analysis-product-summary-heading"><td colspan="'+columnCount+'">Total por producto</td></tr>';
+        summaryProductRows.forEach(function(productRow, productIndex){
+          body += '<tr class="analysis-product-summary-row">'+
+            (productIndex === 0 ? '<td data-field="name" rowspan="'+summaryProductRows.length+'" class="analysis-product-summary-label">Total por producto</td>' : '')+
+            '<td data-field="product" class="analysis-product-summary-product">'+_resumenAnalysisEscape(productRow.key.replace(/^BQT\s+/i,''))+'</td>'+
+            (analysis.mode === 'day' ? '<td data-field="day" class="analysis-product-summary-period">Selected days</td>' : '')+
+            treeMetricCells(productRow)+'</tr>';
+        });
+      }
+    }
     var totalPrevious = rows.reduce(function(sum,row){ return sum + row.previous; }, 0);
     var totalCurrent = rows.reduce(function(sum,row){ return sum + row.current; }, 0);
     var totalDifference = totalCurrent - totalPrevious;
@@ -4979,9 +4994,10 @@ function renderResumenAnalysis(){
       var valueClass = value > 0 ? 'up' : value < 0 ? 'down' : 'stable';
       return '<td data-field="diff-'+pair.from+'-'+pair.to+'" class="'+valueClass+'">'+_resumenAnalysisDelta(value)+'</td>';
     }).join('');
+    var totalLabel = isStoreTable ? 'Total general' : 'Total';
     var totalLabelCell = isStoreTable && hierarchyHeaders.length > 1
-      ? '<td data-field="name" colspan="'+hierarchyHeaders.length+'">Total</td>'
-      : '<td data-field="name">Total</td>';
+      ? '<td data-field="name" colspan="'+hierarchyHeaders.length+'">'+totalLabel+'</td>'
+      : '<td data-field="name">'+totalLabel+'</td>';
     var totalRow = '<tfoot><tr class="analysis-total-row">'+totalLabelCell+
       totalWeekCells+
       totalDifferenceCells+
@@ -5085,13 +5101,53 @@ function renderResumenAnalysis(){
         });
       });
     });
+    if(showProduct){
+      var summaryProductMap = {};
+      analyses.forEach(function(metricAnalysis){
+        Object.keys(metricAnalysis.byProduct || {}).forEach(function(product){ summaryProductMap[product] = true; });
+      });
+      var summaryProducts = Object.keys(summaryProductMap).sort();
+      if(summaryProducts.length){
+        var summaryRowCount = summaryProducts.length * analyses.length * days.length;
+        var firstSummaryRow = true;
+        body += '<tr class="analysis-product-summary-heading"><td colspan="'+columnCount+'">Total por producto</td></tr>';
+        summaryProducts.forEach(function(product){
+          var productRowspan = analyses.length * days.length;
+          var firstProductSummaryRow = true;
+          analyses.forEach(function(metricAnalysis){
+            var firstMetricSummaryRow = true;
+            days.forEach(function(day){
+              var values = isDayMode
+                ? (((metricAnalysis.byProductDay || {})[product] || {})[day] || {})
+                : ((metricAnalysis.byProduct || {})[product] || {});
+              body += '<tr class="analysis-product-summary-row'+(metricAnalysis.metricKey === 'programado' ? ' analysis-programado-row' : '')+'">'+
+                (firstSummaryRow ? '<td data-field="name" rowspan="'+summaryRowCount+'" class="analysis-product-summary-label">Total por producto</td>' : '')+
+                (firstProductSummaryRow ? '<td data-field="product" rowspan="'+productRowspan+'" class="analysis-product-summary-product">'+_resumenAnalysisEscape(product.replace(/^BQT\s+/i,''))+'</td>' : '')+
+                (firstMetricSummaryRow ? '<td data-field="metric" rowspan="'+days.length+'" class="analysis-pivot-level-total"'+(metricAnalysis.metricKey === 'programado' ? ' style="background:#fff4c7!important;border-color:#e2c96d!important"' : '')+'>'+metricAnalysis.metricLabel+'</td>' : '')+
+                (isDayMode ? '<td data-field="day"'+(metricAnalysis.metricKey === 'programado' ? ' style="background:#fff4c7!important;border-color:#e2c96d!important"' : '')+'>'+dayNames[day]+'</td>' : '')+
+                metricCells(metricAnalysis, values)+'</tr>';
+              firstSummaryRow = false;
+              firstProductSummaryRow = false;
+              firstMetricSummaryRow = false;
+            });
+          });
+        });
+      }
+    }
     var totalRows = analyses.map(function(metricAnalysis){
       var totals = {};
       var totalProgramadoStyle = metricAnalysis.metricKey === 'programado' ? ' style="background:#fff4c7!important;border-color:#e2c96d!important"' : '';
       metricWeeks.forEach(function(week){
-        totals[week] = Object.keys(metricAnalysis.byStore || {}).reduce(function(sum,store){ return sum+Number((metricAnalysis.byStore[store] || {})[week] || 0); },0);
+        totals[week] = Object.keys(metricAnalysis.byStore || {}).reduce(function(sum,store){
+          if(!isDayMode) return sum + Number((metricAnalysis.byStore[store] || {})[week] || 0);
+          return sum + days.reduce(function(daySum,day){
+            return daySum + Number((((metricAnalysis.byStoreDay || {})[store] || {})[day] || {})[week] || 0);
+          },0);
+        },0);
       });
-      return '<tr class="analysis-total-row'+(metricAnalysis.metricKey === 'programado' ? ' analysis-programado-row' : '')+'"><td data-field="name" colspan="'+(hierarchyHeaders.length-1)+'"'+totalProgramadoStyle+'>Total</td><td data-field="metric"'+totalProgramadoStyle+'>'+metricAnalysis.metricLabel+'</td>'+metricCells(metricAnalysis, totals)+'</tr>';
+      return '<tr class="analysis-total-row'+(metricAnalysis.metricKey === 'programado' ? ' analysis-programado-row' : '')+'">'+
+        '<td data-field="name" colspan="'+(hierarchyHeaders.length-1)+'"'+totalProgramadoStyle+'>Total general</td>'+
+        '<td data-field="metric"'+totalProgramadoStyle+'>'+metricAnalysis.metricLabel+'</td>'+metricCells(metricAnalysis, totals)+'</tr>';
     }).join('');
     var activeDayNames = ['','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
     var periodFieldsHtml = isDayMode
