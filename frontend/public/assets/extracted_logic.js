@@ -3908,13 +3908,56 @@ function _resumenAnalysisProgramadoSource(weeks, tiendas, productos){
   return root;
 }
 
+function _resumenAnalysisProgramadoWeeks(baseWeeks, tiendas, productos){
+  baseWeeks = Array.isArray(baseWeeks) ? baseWeeks.map(function(week){ return String(week); }) : [];
+  if(!baseWeeks.length) return [];
+
+  var orderedBase = baseWeeks.slice().sort(function(a,b){
+    var ap = _resumenAnalysisWeekParts(a);
+    var bp = _resumenAnalysisWeekParts(b);
+    return ((ap.year * 100) + ap.week) - ((bp.year * 100) + bp.week);
+  });
+  var start = _resumenAnalysisWeekParts(orderedBase[orderedBase.length - 1]);
+  var startSerial = (start.year * 100) + start.week;
+  var sampleDigits = String(orderedBase[orderedBase.length - 1] || '').replace(/\D/g,'');
+  var captureStore = (window._captureProjections && window._captureProjections.sem) || {};
+  var available = {};
+
+  orderedBase.forEach(function(week){
+    var parts = _resumenAnalysisWeekParts(week);
+    available[String(week)] = (parts.year * 100) + parts.week;
+  });
+
+  function weekKey(parts){
+    var week = String(parts.week).padStart(2,'0');
+    if(sampleDigits.length >= 6) return String(parts.year) + week;
+    if(sampleDigits.length === 4) return String(parts.year % 100).padStart(2,'0') + week;
+    return String(parts.week);
+  }
+
+  tiendas.forEach(function(store){
+    productos.forEach(function(product){
+      var entry = captureStore[_captureProjStoreKey(product, store)];
+      ((entry && entry.rows) || []).forEach(function(row){
+        if(!row || !row.saved) return;
+        var parts = _resumenAnalysisWeekParts(row.sem);
+        var serial = (parts.year * 100) + parts.week;
+        if(!parts.week || serial < startSerial) return;
+        available[weekKey(parts)] = serial;
+      });
+    });
+  });
+
+  return Object.keys(available).sort(function(a,b){ return available[a] - available[b]; });
+}
+
 function _resumenAnalysisMetricValue(record, metricKey){
   return Number((record || {})[metricKey]) || 0;
 }
 
-function _collectResumenPosAnalysis(metricKey){
+function _collectResumenPosAnalysis(metricKey, overrideWeeks){
   metricKey = metricKey === 'programado' || metricKey === 'embarque' ? metricKey : 'ventas';
-  var weeks = getSemanasActivas().map(function(s){ return String(s); }).sort(function(a,b){
+  var weeks = (Array.isArray(overrideWeeks) && overrideWeeks.length ? overrideWeeks : getSemanasActivas()).map(function(s){ return String(s); }).sort(function(a,b){
     return (parseInt(a,10)||0) - (parseInt(b,10)||0);
   });
   var tiendas = getTiendasActivas();
@@ -3967,10 +4010,10 @@ function _resumenAnalysisDayInfo(value){
   return {index:index, label:labels[index], date:value};
 }
 
-function _collectResumenPosAnalysisView(mode, metricKey){
+function _collectResumenPosAnalysisView(mode, metricKey, overrideWeeks){
   mode = mode === 'day' ? 'day' : 'week';
   metricKey = metricKey === 'programado' || metricKey === 'embarque' ? metricKey : 'ventas';
-  var weekly = _collectResumenPosAnalysis(metricKey);
+  var weekly = _collectResumenPosAnalysis(metricKey, overrideWeeks);
   var selectedWeeks = weekly.weeks;
   var periodLabels = {};
   var comparisonPairs = [];
@@ -4577,8 +4620,16 @@ function renderResumenAnalysis(){
   selectedMetrics = selectedMetrics.filter(function(metric,index){ return selectedMetrics.indexOf(metric) === index; });
   state.resumenAnalysisMetrics = selectedMetrics;
   var analysisMetricKeys = selectedMetrics.length ? selectedMetrics.slice() : ['ventas'];
+  var analysisWeeksOverride = null;
+  if(selectedMetrics.indexOf('programado') >= 0){
+    analysisWeeksOverride = _resumenAnalysisProgramadoWeeks(
+      getSemanasActivas(),
+      getTiendasActivas(),
+      getProductosActivos()
+    );
+  }
   var analyses = analysisMetricKeys.map(function(metric){
-    return _collectResumenPosAnalysisView(state.resumenAnalysisPeriodMode, metric);
+    return _collectResumenPosAnalysisView(state.resumenAnalysisPeriodMode, metric, analysisWeeksOverride);
   });
   var analysis = analyses[0];
   var selectedWeeks = analysis.weeks;
