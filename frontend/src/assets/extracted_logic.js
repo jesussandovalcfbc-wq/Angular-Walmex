@@ -1,4 +1,3 @@
-window.initWalmexJS = function(DATA, SUPABASE_DATA, DEVOLUCIONES_DATA, SUPABASE_URL, SUPABASE_KEY) {
 
 window.syncFilter = function(el, targetId) {
     var targetEl = document.getElementById(targetId);
@@ -22,6 +21,7 @@ try {
 } catch(e) {}
 
 var SUPABASE_UI_ROW_ID = 'choferes_ui_state';
+var UI_STATE_READY = false;
 
 window.saveChecks = function() {
     try {
@@ -33,8 +33,14 @@ window.saveChecks = function() {
         localStorage.setItem('notesWalmart', JSON.stringify(notesWalmart));
     } catch (e) {}
     
+    // Never overwrite the shared state before its current value has loaded.
+    if (!UI_STATE_READY) {
+        console.warn('UI state is still loading; Supabase save was skipped.');
+        return;
+    }
+
     // Sync to Supabase
-    if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
+    if (_supabaseConfigured()) {
         var payload = {
             checkedCFBC: [...checkedCFBC],
             checkedWalmart: [...checkedWalmart],
@@ -61,14 +67,18 @@ window.saveChecks = function() {
 };
 
 window.loadUIStateFromSupabase = function() {
-    if (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL) {
-        fetch(SUPABASE_URL + '/rest/v1/walmex_resumen_captura?id=eq.' + encodeURIComponent(SUPABASE_UI_ROW_ID) + '&select=data', {
+    if (!_supabaseConfigured()) return Promise.resolve(false);
+
+    return fetch(SUPABASE_URL + '/rest/v1/walmex_resumen_captura?id=eq.' + encodeURIComponent(SUPABASE_UI_ROW_ID) + '&select=data', {
             headers: {
                 'apikey': SUPABASE_KEY,
                 'Authorization': 'Bearer ' + SUPABASE_KEY
             }
         })
-        .then(function(res) { return res.ok ? res.json() : []; })
+        .then(function(res) {
+            if (!res.ok) throw new Error('Supabase UI state request failed with status ' + res.status);
+            return res.json();
+        })
         .then(function(rows) {
             if (rows && rows[0] && rows[0].data) {
                 var d = rows[0].data;
@@ -94,13 +104,15 @@ window.loadUIStateFromSupabase = function() {
                     renderChoferes();
                 }
             }
+            UI_STATE_READY = true;
+            return true;
         })
-        .catch(function(e) { console.error("Error loading UI state from Supabase", e); });
-    }
+        .catch(function(e) {
+            UI_STATE_READY = false;
+            console.error("Error loading UI state from Supabase", e);
+            return false;
+        });
 };
-
-// Initiate load right away
-setTimeout(window.loadUIStateFromSupabase, 500);
 
 window.toggleFlag = function(btn, key, source) {
     var row = btn.closest('tr');
@@ -193,16 +205,9 @@ window.saveNota = function(key, value, source) {
     window.saveChecks();
 };
 
-
+var DATA = null;
 var SUPABASE_DATA = null;
-try {
-    
-} catch(e) { console.error("Error parsing supabase JSON:", e); }
-
 var DEVOLUCIONES_DATA = [];
-try {
-    
-} catch(e) { console.error("Error parsing devoluciones JSON:", e); }
 
 // ── Sub-tabs Choferes ──
 function toggleChoferesMenu(e) {
@@ -285,8 +290,8 @@ var MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','
 
 // ====== SUPABASE (captura compartida "Programado") ======
 // Solo se usa la publishable_key (clave publica), nunca una clave secreta.
-
-
+var SUPABASE_URL = '__SUPABASE_URL__';
+var SUPABASE_KEY = '__SUPABASE_PUBLISHABLE_KEY__';
 var SUPABASE_CAPTURE_TABLE = 'walmex_resumen_captura_v2';
 var SUPABASE_CAPTURE_ROW_ID = 'captura_global';
 
@@ -463,6 +468,7 @@ function init(){
   var chkAllT = document.createElement('input');
   chkAllT.type = 'checkbox';
   chkAllT.id = 'chkTodasTienda';
+  chkAllT.checked = true;
   chkAllT.onchange = function(){ toggleTodasTiendas(); };
   rowAllT.appendChild(chkAllT);
   rowAllT.appendChild(document.createTextNode('Seleccionar todas'));
@@ -470,15 +476,14 @@ function init(){
   
   DATA.tiendas.forEach(function(t){
     var labelTxt = t.replace('SC ','');
-    var isFirst = (t === DATA.tiendas[0]);
     var rowT = document.createElement('label');
-    rowT.className = 'sem-item' + (isFirst ? ' on' : '');
+    rowT.className = 'sem-item on';
     rowT.id = 'tienda-row-'+t;
     var chkT = document.createElement('input');
     chkT.type = 'checkbox';
     chkT.className = 'tienda-chk';
     chkT.value = t;
-    chkT.checked = isFirst;
+    chkT.checked = true;
     chkT.onchange = function(){ onTiendaChk(); };
     rowT.appendChild(chkT);
     rowT.appendChild(document.createTextNode(labelTxt));
@@ -520,11 +525,12 @@ function init(){
   state.semana = DATA.semanas[DATA.semanas.length-1];
   state.semanas_sel = [state.semana];
   state.tienda = DATA.tiendas[0];
-  state.tiendas_sel = [DATA.tiendas[0]];
-  updateSemLabel(); updateTiendaLabel(); syncCiudadSelectFromTiendas();
+  state.tiendas_sel = DATA.tiendas.slice();
+  updateResumenModeButtons();
+  updateHeader(); updateSemLabel(); updateTiendaLabel(); syncRutaSelectFromTiendas(); render();
   document.getElementById('loader').style.display = 'none';
   document.getElementById('app').style.display    = 'block';
-  setView(state.view || 'producto');
+  _initializeResumenAnalysisTab();
 }
 
 function toggleSemDrop(){
@@ -557,7 +563,7 @@ function applyTiendaSelection(selected){
   state.tienda = state.tiendas_sel.length > 0 ? state.tiendas_sel[0] : DATA.tiendas[0];
   state.tiendaT = null;
   updateTiendaLabel();
-  syncCiudadSelectFromTiendas();
+  syncRutaSelectFromTiendas();
   updateHeader();
   syncChkTodasTiendas();
   if(state.view==='producto') render();
@@ -578,57 +584,25 @@ function updateTiendaLabel(){
     lbl.textContent = sel.length+' tiendas seleccionadas';
   }
 }
-var CIUDAD_TIENDAS_MAP = {
-    'ENSENADA': ['ENSENADA', 'ENSENADA CENTRO'],
-    'TIJUANA': ['DIAZ ORDAZ', 'LOMAS DE SANTA FE', 'MACROPLAZA INSURGENTES', 'PACIFICO', 'PLAYAS DE TIJUANA', 'ROSARITO', 'TIJUANA 2000', 'TIJUANA HIPODROMO'],
-    'MEXICALI': ['GALERIAS DEL VALLE', 'MEXICALI', 'MEXICALI NOVENA', 'NUEVO MEXICALI', 'PLAZA SAN PEDRO', 'TECATE GARITA']
-};
-
-function ciudadDeTienda(tienda) {
-  var nombre = String(tienda || '').toUpperCase();
-  var ciudades = Object.keys(CIUDAD_TIENDAS_MAP);
-  for (var c = 0; c < ciudades.length; c++) {
-    var permitidas = CIUDAD_TIENDAS_MAP[ciudades[c]];
-    for (var i = 0; i < permitidas.length; i++) {
-      if (nombre.indexOf(permitidas[i]) !== -1) return ciudades[c];
-    }
-  }
-  return '';
-}
-
-function syncCiudadSelectFromTiendas() {
-  var select = document.getElementById('ciudadSelect');
+function syncRutaSelectFromTiendas() {
+  var select = document.getElementById('rutaSelect');
   if (!select) return;
   var seleccionadas = state.tiendas_sel || [];
   if (areAllTiendasSelected(seleccionadas)) {
     select.value = 'Todas';
     return;
   }
-  var ciudades = seleccionadas.map(ciudadDeTienda).filter(Boolean);
-  var unica = ciudades.length > 0 && ciudades.every(function(c){ return c === ciudades[0]; });
-  select.value = unica
-    ? ciudades[0].charAt(0) + ciudades[0].slice(1).toLowerCase()
-    : '';
+  var tiendaRuta = DATA.tienda_ruta || {};
+  var rutas = seleccionadas.map(function(t){ return tiendaRuta[t] || ''; }).filter(Boolean);
+  var unica = rutas.length > 0 && rutas.every(function(r){ return r === rutas[0]; });
+  select.value = unica ? rutas[0] : '';
 }
 
-function onCiudadChange(ciudad) {
+function onRutaChange(ruta) {
+  var tiendaRuta = DATA.tienda_ruta || {};
   var chks = document.querySelectorAll('#tiendaDropMenu input[type=checkbox].tienda-chk');
   chks.forEach(function(chk) {
-    var t = chk.value.toUpperCase();
-    if (ciudad === 'Todas') {
-      chk.checked = true;
-    } else {
-      var cityKey = ciudad.toUpperCase();
-      var allowed = CIUDAD_TIENDAS_MAP[cityKey] || [];
-      var isMatch = false;
-      for (var i = 0; i < allowed.length; i++) {
-        if (t.indexOf(allowed[i]) !== -1) {
-          isMatch = true;
-          break;
-        }
-      }
-      chk.checked = isMatch;
-    }
+    chk.checked = ruta === 'Todas' || tiendaRuta[chk.value] === ruta;
   });
   onTiendaChk();
 }
@@ -866,6 +840,14 @@ function onSemChk(){
 function onSem(sel){ onSemChk(); }
 
 function updateHeader(){
+  var actualizacionEl = document.getElementById('hdrActualizacion');
+  if(actualizacionEl){
+    var rawActualizacion = DATA._source_last_modified;
+    var fechaActualizacion = rawActualizacion ? new Date(rawActualizacion) : null;
+    actualizacionEl.textContent = fechaActualizacion && !isNaN(fechaActualizacion.getTime())
+      ? fechaActualizacion.toLocaleDateString('es-MX', {day:'2-digit', month:'2-digit', year:'numeric'})
+      : 'No disponible';
+  }
   var sems = getSemanasActivas();
   var tiendas = getTiendasActivas();
   var isAll = (!state.semanas_sel || state.semanas_sel.length === 0);
@@ -1239,13 +1221,6 @@ function renderChoferes() {
 }
 
 function setView(v){
-  try {
-    _setViewImpl(v);
-  } catch(e) {
-    alert("Error in setView: " + e.message + "\n" + e.stack);
-  }
-}
-function _setViewImpl(v){
   var ctrlCont = document.getElementById('globalCtrlContainer');
   if(ctrlCont) ctrlCont.style.display = (v === 'choferes') ? 'none' : 'flex';
   if(v==='choferes') renderChoferes();
@@ -1290,8 +1265,6 @@ function _setViewImpl(v){
   document.getElementById('viewResumen').style.display = v==='resumen' ? 'block' : 'none';
   var vc = document.getElementById('viewChoferes'); if(vc) vc.style.display = v==='choferes' ? 'block' : 'none';
   
-  var aiWidget = document.getElementById('aiChatWidget');
-  if(aiWidget) aiWidget.style.display = (v === 'resumen') ? 'block' : 'none';
   // Ocultar filtros de tienda solo en vistas que no los usan
   var tiendaDropWrap = document.getElementById('tiendaDropWrap');
   var tiendaLabel = Array.from(document.querySelectorAll('.ctrl label')).find(el => el.textContent === 'Tienda:');
@@ -1315,18 +1288,10 @@ function _setViewImpl(v){
         var hdrH = stickyHdr.getBoundingClientRect().height;
         document.documentElement.style.setProperty('--global-header-height', hdrH + 'px');
       }
-      // Medir y fijar la altura del box-hdr del resumen para el offset del thead sticky
-      var resumenBoxHdr = document.querySelector('#viewResumen .resumen-main-box .box-hdr');
-      if(resumenBoxHdr){
-        var boxHdrH = resumenBoxHdr.getBoundingClientRect().height;
-        document.documentElement.style.setProperty('--resumen-boxhdr-height', boxHdrH + 'px');
-      }
       renderResumen();
     });
   }
-
   else render();
-}
 }
 
 function selTiendaT(t){
@@ -1736,7 +1701,7 @@ function renderGasto(){
   var headHTML = '<tr><th>RUTA / PRODUCTO</th>';
   sems.forEach(function(s){
     var yr = Math.floor(s/100), wk = s%100;
-    var label = (yr >= 2000) ? yr+'-'+String(wk).padStart(2,'0') : String(s).padStart(2,'0');
+    var label = (yr >= 2000) ? String(yr).slice(-2)+String(wk).padStart(2,'0') : String(s).padStart(4,'0');
     headHTML += '<th>'+label+'</th>';
   });
   headHTML += '<th>Grand Total</th></tr>';
@@ -1847,7 +1812,7 @@ function renderGasolina(){
   var headHTML = '<tr><th>Concepto</th>';
   sems.forEach(function(s){
     var yr = Math.floor(s/100), wk = s%100;
-    var label = (yr >= 2000) ? yr+'-'+String(wk).padStart(2,'0') : String(s).padStart(2,'0');
+    var label = (yr >= 2000) ? String(yr).slice(-2)+String(wk).padStart(2,'0') : String(s).padStart(4,'0');
     headHTML += '<th>'+label+'</th>';
   });
   headHTML += '<th>Grand Total</th></tr>';
@@ -2547,6 +2512,10 @@ function _getSavedProgramadoRows(r1Key, r2Key) {
   /* Filtrar solo filas con datos y que estén marcadas como guardadas */
   return entry.rows.filter(function(r){
     return r.saved && (r.sem || (r.values||[]).some(function(v){ return v !== '' && parseFloat(v) > 0; }));
+  }).sort(function(a, b){
+    var semA = parseInt(String(a.sem).trim(), 10) || 0;
+    var semB = parseInt(String(b.sem).trim(), 10) || 0;
+    return semA - semB;
   });
 }
 
@@ -3836,119 +3805,1078 @@ function _ensureNextSemanaProyeccion() {
   return curNext;
 }
 
-function renderResumen() {
-  try {
-    _renderResumenImpl();
-  } catch(e) {
-    setTimeout(function() {
-      var head = document.getElementById('tResumenHead');
-      if (head) head.innerHTML = '<tr><th colspan="4" style="background:red;color:white;padding:10px;">JavaScript Error</th></tr>';
-      var body = document.getElementById('tResumenBody');
-      if (body) body.innerHTML = '<tr><td colspan="4" style="color:red; padding:10px;"><pre>' + e.stack + '</pre></td></tr>';
-    }, 100);
-  }
-  // Configurar sticky header después del render
-  requestAnimationFrame(function(){ setupResumenStickyHeader(); });
+/* Analisis de variacion POS. Es estrictamente de lectura: usa los datos ya
+   cargados en DATA.resumen_diario y nunca guarda estado en Supabase. */
+function _resumenAnalysisStatus(previous, current){
+  var delta = current - previous;
+  if(previous === 0 && current === 0) return {key:'stable', label:'Sin ventas'};
+  if(previous === 0 && current > 0) return {key:'up', label:'Nuevo movimiento'};
+  var pct = previous ? (delta / previous) * 100 : 0;
+  if(delta >= 5 && pct >= 5) return {key:'up', label:'Subiendo'};
+  if(delta <= -5 && pct <= -5) return {key:'down', label:'Bajando'};
+  return {key:'stable', label:'Sin movimiento'};
 }
 
-/* ── Sticky Header Clonado para Resumen ──────────────────────────────── */
-function setupResumenStickyHeader() {
-  var thead    = document.getElementById('tResumenHead');
-  var table    = document.getElementById('tResumen');
-  var wrap     = document.querySelector('#viewResumen .resumen-table-wrap');
-  var globalHd = document.querySelector('.global-sticky-header');
-  var boxHdr   = document.querySelector('#viewResumen .resumen-main-box .box-hdr');
-  if (!thead || !table || !wrap) return;
-
-  // --- Crear/reutilizar el contenedor del clon ---
-  var clone = document.getElementById('_resumenStickyClone');
-  if (!clone) {
-    clone = document.createElement('div');
-    clone.id = '_resumenStickyClone';
-    clone.style.cssText = [
-      'position:fixed',
-      'z-index:7000',
-      'overflow:hidden',
-      'visibility:hidden',
-      'pointer-events:none',
-      'background:#dce6f1',
-      'box-shadow:0 2px 6px rgba(0,0,0,0.15)',
-    ].join(';');
-    document.body.appendChild(clone);
+function _resumenAnalysisTrendStatus(weekValues, weeks){
+  if(!weeks || weeks.length < 3){
+    return _resumenAnalysisStatus(weekValues[weeks[0]] || 0, weekValues[weeks[weeks.length - 1]] || 0);
   }
+  var values = weeks.map(function(week){ return Number(weekValues[week]) || 0; });
+  var n = values.length;
+  var sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+  values.forEach(function(value, index){
+    sumX += index;
+    sumY += value;
+    sumXY += index * value;
+    sumXX += index * index;
+  });
+  var denominator = (n * sumXX) - (sumX * sumX);
+  var slope = denominator ? ((n * sumXY) - (sumX * sumY)) / denominator : 0;
+  var average = sumY / n;
+  var slopePct = average ? (slope / average) * 100 : 0;
+  var hasPositive = false, hasNegative = false;
+  for(var i=1; i<values.length; i++){
+    var difference = values[i] - values[i - 1];
+    if(difference > 0) hasPositive = true;
+    if(difference < 0) hasNegative = true;
+  }
+  if(slopePct >= 5) return {key:'up', label:'Subiendo'};
+  if(slopePct <= -5) return {key:'down', label:'Bajando'};
+  if(hasPositive && hasNegative) return {key:'stable', label:'Variable'};
+  return {key:'stable', label:'Sin movimiento'};
+}
 
-  // --- Clonar el thead ---
-  clone.innerHTML = '';
-  var cloneTable = document.createElement('table');
-  cloneTable.className = 't';
-  cloneTable.style.cssText = 'border-collapse:collapse;font-size:.66rem;font-variant-numeric:tabular-nums;table-layout:fixed;margin:0;';
-  cloneTable.appendChild(thead.cloneNode(true));
-  clone.appendChild(cloneTable);
+function _collectResumenPosAnalysis(){
+  var weeks = getSemanasActivas().map(function(s){ return String(s); }).sort(function(a,b){
+    return (parseInt(a,10)||0) - (parseInt(b,10)||0);
+  });
+  var tiendas = getTiendasActivas();
+  var productos = getProductosActivos();
+  var tiendaSet = {};
+  var productoSet = {};
+  tiendas.forEach(function(t){ tiendaSet[t] = true; });
+  productos.forEach(function(p){ productoSet[p] = true; });
 
-  // --- Sincronizar posición y anchos ---
-  function sync() {
-    var theadRect  = thead.getBoundingClientRect();
-    var wrapRect   = wrap.getBoundingClientRect();
-    var globalH    = globalHd  ? globalHd.getBoundingClientRect().height  : 0;
-    var boxHdrH    = boxHdr    ? boxHdr.getBoundingClientRect().height    : 0;
-    var stickyTop  = globalH + boxHdrH;
+  var totals = {};
+  var byStore = {};
+  var byProduct = {};
+  var byPair = {};
+  weeks.forEach(function(w){ totals[w] = 0; });
 
-    // Mostrar cuando el thead real ya subió por encima del sticky top
-    if (theadRect.top < stickyTop) {
-      // Sincronizar anchos de columna fila a fila
-      var origRows  = thead.querySelectorAll('tr');
-      var cloneRows = cloneTable.querySelectorAll('tr');
-      origRows.forEach(function(row, ri) {
-        if (!cloneRows[ri]) return;
-        var origCells  = row.querySelectorAll('th');
-        var cloneCells = cloneRows[ri].querySelectorAll('th');
-        origCells.forEach(function(th, ci) {
-          if (cloneCells[ci]) {
-            var w = th.getBoundingClientRect().width;
-            cloneCells[ci].style.width    = w + 'px';
-            cloneCells[ci].style.minWidth = w + 'px';
-            cloneCells[ci].style.maxWidth = w + 'px';
-          }
+  var srcRoot = (typeof DATA !== 'undefined' && DATA.resumen_diario) || {};
+  tiendas.forEach(function(store){
+    var storeSrc = srcRoot[store] || {};
+    weeks.forEach(function(week){
+      var weekSrc = storeSrc[week] || {};
+      Object.keys(weekSrc).forEach(function(product){
+        if(!productoSet[product]) return;
+        Object.keys(weekSrc[product] || {}).forEach(function(date){
+          var value = Number(((weekSrc[product][date] || {}).ventas)) || 0;
+          totals[week] += value;
+          if(!byStore[store]) byStore[store] = {};
+          if(!byProduct[product]) byProduct[product] = {};
+          if(!byPair[store]) byPair[store] = {};
+          if(!byPair[store][product]) byPair[store][product] = {};
+          byStore[store][week] = (byStore[store][week] || 0) + value;
+          byProduct[product][week] = (byProduct[product][week] || 0) + value;
+          byPair[store][product][week] = (byPair[store][product][week] || 0) + value;
         });
       });
+    });
+  });
 
-      // Posición y dimensiones del clon
-      var tableW = table.getBoundingClientRect().width;
-      clone.style.top        = stickyTop + 'px';
-      clone.style.left       = wrapRect.left + 'px';
-      clone.style.width      = wrapRect.width + 'px';
-      cloneTable.style.width = tableW + 'px';
-
-      // Sincronizar scroll horizontal
-      clone.scrollLeft = wrap.scrollLeft;
-
-      clone.style.visibility    = 'visible';
-      clone.style.pointerEvents = 'auto';
-    } else {
-      clone.style.visibility    = 'hidden';
-      clone.style.pointerEvents = 'none';
-    }
-  }
-
-  // --- Eliminar listeners anteriores y agregar nuevos ---
-  if (window._resumenStickyScrollCb) {
-    window.removeEventListener('scroll', window._resumenStickyScrollCb, true);
-  }
-  if (window._resumenStickyWrapCb && window._resumenStickyWrap) {
-    window._resumenStickyWrap.removeEventListener('scroll', window._resumenStickyWrapCb);
-  }
-  window._resumenStickyScrollCb = sync;
-  window._resumenStickyWrapCb   = sync;
-  window._resumenStickyWrap     = wrap;
-  window.addEventListener('scroll', sync, true);
-  wrap.addEventListener('scroll', sync);
-
-  sync();
+  return {weeks:weeks, totals:totals, byStore:byStore, byProduct:byProduct, byPair:byPair};
 }
 
-function _renderResumenImpl(){
-  var debugTitle = document.getElementById('resumenTitleText');
-  if (debugTitle) debugTitle.textContent = 'Render Resumen Ejecutándose...';
+function _resumenAnalysisDayInfo(value){
+  var parts = String(value || '').replace(/-/g,'/').split('/').map(function(part){ return parseInt(part,10); });
+  if(parts.length < 3 || !parts[0] || !parts[1] || !parts[2]) return null;
+  var date = new Date(parts[0], parts[1] - 1, parts[2]);
+  var day = date.getDay();
+  var index = day === 0 ? 7 : day;
+  var labels = ['','Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+  return {index:index, label:labels[index], date:value};
+}
+
+function _collectResumenPosAnalysisView(mode){
+  mode = mode === 'day' ? 'day' : 'week';
+  var weekly = _collectResumenPosAnalysis();
+  var selectedWeeks = weekly.weeks;
+  var periodLabels = {};
+  var comparisonPairs = [];
+  var baselineKeys = [];
+  var currentKeys = [];
+
+  if(mode === 'week'){
+    selectedWeeks.forEach(function(week){ periodLabels[week] = resumenSemLabel(week); });
+    selectedWeeks.slice(1).forEach(function(week,index){
+      comparisonPairs.push({from:selectedWeeks[index], to:week, label:'Δ '+resumenSemLabel(selectedWeeks[index])+'-'+resumenSemLabel(week)});
+    });
+    baselineKeys = selectedWeeks.length ? [selectedWeeks[0]] : [];
+    currentKeys = selectedWeeks.length ? [selectedWeeks[selectedWeeks.length - 1]] : [];
+    weekly.mode = mode;
+    weekly.periods = selectedWeeks.slice();
+    weekly.periodLabels = periodLabels;
+    weekly.comparisonPairs = comparisonPairs;
+    weekly.baselineKeys = baselineKeys;
+    weekly.currentKeys = currentKeys;
+    weekly.note = 'Totales completos por semana';
+    return weekly;
+  }
+
+  var tiendas = getTiendasActivas();
+  var productos = getProductosActivos();
+  var productoSet = {};
+  productos.forEach(function(product){ productoSet[product] = true; });
+  var srcRoot = (typeof DATA !== 'undefined' && DATA.resumen_diario) || {};
+  var latestWeek = selectedWeeks[selectedWeeks.length - 1];
+  var cutoffDay = 0;
+
+  tiendas.forEach(function(store){
+    var weekSrc = ((srcRoot[store] || {})[latestWeek]) || {};
+    Object.keys(weekSrc).forEach(function(product){
+      if(!productoSet[product]) return;
+      Object.keys(weekSrc[product] || {}).forEach(function(dateKey){
+        var info = _resumenAnalysisDayInfo(dateKey);
+        var metric = (weekSrc[product] || {})[dateKey] || {};
+        if(info && Number(metric.ventas) > 0 && info.index > cutoffDay) cutoffDay = info.index;
+      });
+    });
+  });
+  if(!cutoffDay) cutoffDay = 7;
+
+  var selectedDays = Array.isArray(state.resumenAnalysisSelectedDays)
+    ? state.resumenAnalysisSelectedDays.map(function(day){ return parseInt(day,10); }).filter(function(day){ return day >= 1 && day <= 7; })
+    : [];
+  selectedDays = selectedDays.filter(function(day,index){ return selectedDays.indexOf(day) === index; }).sort(function(a,b){ return a-b; });
+  if(!selectedDays.length){
+    selectedDays = [cutoffDay];
+    state.resumenAnalysisSelectedDays = selectedDays.slice();
+  }
+  var fullDayNames = ['','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  var periods = selectedWeeks.slice();
+  periods.forEach(function(week){
+    periodLabels[week] = resumenSemLabel(week);
+  });
+  periods.slice(1).forEach(function(week,index){
+    comparisonPairs.push({
+      from:periods[index],
+      to:week,
+      label:'Δ '+resumenSemLabel(periods[index])+'-'+resumenSemLabel(week)
+    });
+  });
+  baselineKeys = periods.length ? [periods[0]] : [];
+  currentKeys = periods.length ? [periods[periods.length - 1]] : [];
+
+  var byStore = {};
+  var byProduct = {};
+  var byPair = {};
+  var byStoreDay = {};
+  var byProductDay = {};
+  var byPairDay = {};
+  function add(target, key, period, value){
+    if(!target[key]) target[key] = {};
+    target[key][period] = (target[key][period] || 0) + value;
+  }
+  tiendas.forEach(function(store){
+    var storeSrc = srcRoot[store] || {};
+    selectedWeeks.forEach(function(week){
+      var weekSrc = storeSrc[week] || {};
+      Object.keys(weekSrc).forEach(function(product){
+        if(!productoSet[product]) return;
+        Object.keys(weekSrc[product] || {}).forEach(function(dateKey){
+          var info = _resumenAnalysisDayInfo(dateKey);
+          if(!info || selectedDays.indexOf(info.index) < 0) return;
+          var metric = (weekSrc[product] || {})[dateKey] || {};
+          var value = Number(metric.ventas) || 0;
+          var period = week;
+          add(byStore, store, period, value);
+          add(byProduct, product, period, value);
+          if(!byStoreDay[store]) byStoreDay[store] = {};
+          if(!byStoreDay[store][info.index]) byStoreDay[store][info.index] = {};
+          byStoreDay[store][info.index][period] = (byStoreDay[store][info.index][period] || 0) + value;
+          if(!byProductDay[product]) byProductDay[product] = {};
+          if(!byProductDay[product][info.index]) byProductDay[product][info.index] = {};
+          byProductDay[product][info.index][period] = (byProductDay[product][info.index][period] || 0) + value;
+          if(!byPairDay[store]) byPairDay[store] = {};
+          if(!byPairDay[store][product]) byPairDay[store][product] = {};
+          if(!byPairDay[store][product][info.index]) byPairDay[store][product][info.index] = {};
+          byPairDay[store][product][info.index][period] = (byPairDay[store][product][info.index][period] || 0) + value;
+          if(!byPair[store]) byPair[store] = {};
+          add(byPair[store], product, period, value);
+        });
+      });
+    });
+  });
+
+  return {
+    mode:mode,
+    weeks:selectedWeeks,
+    periods:periods,
+    periodLabels:periodLabels,
+    comparisonPairs:comparisonPairs,
+    baselineKeys:baselineKeys,
+    currentKeys:currentKeys,
+    byStore:byStore,
+    byProduct:byProduct,
+    byPair:byPair,
+    byStoreDay:byStoreDay,
+    byProductDay:byProductDay,
+    byPairDay:byPairDay,
+    cutoffDay:cutoffDay,
+    selectedDays:selectedDays,
+    latestWeek:latestWeek,
+    note:'Comparando '+selectedDays.map(function(day){ return fullDayNames[day]; }).join(', ')+' entre semanas seleccionadas'+
+      (selectedDays.some(function(day){ return day > cutoffDay; }) ? ' · la semana '+resumenSemLabel(latestWeek)+' aún no tiene datos de todos los días elegidos' : '')
+  };
+}
+
+function _resumenAnalysisRows(source, weeks, baselineKeys, currentKeys, useTrend){
+  return Object.keys(source || {}).map(function(key){
+    var weekValues = {};
+    weeks.forEach(function(week){ weekValues[week] = Number((source[key] || {})[week]) || 0; });
+    var previousList = baselineKeys && baselineKeys.length ? baselineKeys : [weeks[0]];
+    var currentList = currentKeys && currentKeys.length ? currentKeys : [weeks[weeks.length - 1]];
+    var previous = previousList.reduce(function(sum,period){ return sum + (weekValues[period] || 0); }, 0);
+    var current = currentList.reduce(function(sum,period){ return sum + (weekValues[period] || 0); }, 0);
+    var delta = current - previous;
+    var pct = previous ? (delta / previous) * 100 : null;
+    var status = useTrend === false ? _resumenAnalysisStatus(previous, current) : _resumenAnalysisTrendStatus(weekValues, weeks);
+    return {key:key, weekValues:weekValues, previous:previous, current:current, delta:delta, pct:pct, status:status};
+  }).sort(function(a,b){
+    return Math.abs(b.delta) - Math.abs(a.delta) || b.current - a.current || a.key.localeCompare(b.key);
+  });
+}
+
+function _resumenAnalysisNumber(value){
+  return Number(value || 0).toLocaleString('es-MX', {maximumFractionDigits:0});
+}
+
+function _resumenAnalysisDelta(value){
+  var n = Number(value || 0);
+  return (n > 0 ? '+' : '') + _resumenAnalysisNumber(n);
+}
+
+function _resumenAnalysisEscape(value){
+  return String(value === null || value === undefined ? '' : value)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function setResumenAnalysisView(view){
+  state.resumenAnalysisView = view === 'producto' ? 'producto' : 'tienda';
+  state.resumenAnalysisSelected = null;
+  renderResumenAnalysis();
+}
+
+function setResumenAnalysisFilter(filter){
+  state.resumenAnalysisFilter = filter || 'all';
+  renderResumenAnalysis();
+}
+
+function selectResumenAnalysisItem(index){
+  var rows = window._resumenAnalysisVisibleRows || [];
+  if(!rows[index]) return;
+  state.resumenAnalysisSelected = rows[index].key;
+  renderResumenAnalysis();
+}
+
+function toggleResumenStoreProducts(index){
+  var keys = window._resumenAnalysisStoreKeys || [];
+  var store = keys[index];
+  if(!store) return;
+  if(!state.resumenExpandedStores) state.resumenExpandedStores = {};
+  if(state.resumenExpandedStores[store]) delete state.resumenExpandedStores[store];
+  else state.resumenExpandedStores[store] = true;
+  renderResumenAnalysis();
+}
+
+function toggleResumenAnalysisDayTree(gridKey, index){
+  var grids = window._resumenAnalysisDayTreeKeys || {};
+  var keys = grids[gridKey] || [];
+  var item = keys[index];
+  if(!item) return;
+  if(!state.resumenCollapsedDayTrees) state.resumenCollapsedDayTrees = {};
+  var treeKey = gridKey+'|'+item;
+  if(state.resumenCollapsedDayTrees[treeKey]) delete state.resumenCollapsedDayTrees[treeKey];
+  else state.resumenCollapsedDayTrees[treeKey] = true;
+  renderResumenAnalysis();
+}
+
+function toggleResumenAnalysisProductDayTree(storeIndex, productIndex, event){
+  if(event){ event.preventDefault(); event.stopPropagation(); }
+  var stores = window._resumenAnalysisStoreKeys || [];
+  var productsByStore = window._resumenAnalysisStoreProductKeys || {};
+  var store = stores[storeIndex];
+  var product = (productsByStore[storeIndex] || [])[productIndex];
+  if(!store || !product) return;
+  if(!state.resumenCollapsedProductDayTrees) state.resumenCollapsedProductDayTrees = {};
+  var treeKey = store+'|'+product;
+  if(state.resumenCollapsedProductDayTrees[treeKey]) delete state.resumenCollapsedProductDayTrees[treeKey];
+  else state.resumenCollapsedProductDayTrees[treeKey] = true;
+  renderResumenAnalysis();
+}
+
+function openResumenAnalisisTab(){
+  var weeks = getSemanasActivas();
+  if(weeks.length < 2){
+    window.alert('Selecciona al menos dos semanas para abrir el análisis.');
+    return;
+  }
+  var params = new URLSearchParams();
+  params.set('resumen-analysis', '1');
+  params.set('weeks', weeks.join(','));
+  params.set('stores', getTiendasActivas().join('|'));
+  params.set('products', getProductosActivos().join('|'));
+  var analysisUrl = window.location.origin + window.location.pathname + '?' + params.toString();
+  var analysisTab = window.open(analysisUrl, '_blank');
+  if(analysisTab) analysisTab.opener = null;
+}
+
+function closeResumenAnalisisView(){
+  if(document.body.classList.contains('resumen-analysis-standalone')){
+    window.close();
+    return;
+  }
+  toggleResumenAnalisis(false);
+}
+
+function _initializeResumenAnalysisTab(){
+  var params = new URLSearchParams(window.location.search);
+  if(params.get('resumen-analysis') !== '1') return;
+
+  function selectedValues(paramName, separator, available){
+    var raw = params.get(paramName) || '';
+    var requested = raw ? raw.split(separator).filter(Boolean) : [];
+    return requested.filter(function(value){
+      return available.some(function(item){ return String(item) === String(value); });
+    });
+  }
+
+  var weeks = selectedValues('weeks', ',', DATA.semanas).map(function(value){ return parseInt(value,10); });
+  var stores = selectedValues('stores', '|', DATA.tiendas);
+  var products = selectedValues('products', '|', DATA.productos);
+  if(weeks.length) {
+    state.semanas_sel = weeks;
+    state.semana = weeks[weeks.length - 1];
+  }
+  if(stores.length) {
+    state.tiendas_sel = stores;
+    state.tienda = stores[0];
+  }
+  if(products.length) state.productos_sel = products;
+
+  document.body.classList.add('resumen-analysis-standalone');
+  state.resumenAnalisisOpen = true;
+  setView('resumen');
+  requestAnimationFrame(function(){
+    var panel = document.getElementById('resumenAnalysisPanel');
+    if(panel){
+      panel.style.display = 'block';
+      panel.classList.add('open','standalone');
+      panel.setAttribute('aria-hidden','false');
+    }
+    renderResumenAnalysis();
+    document.title = 'Análisis de ventas - Walmex';
+  });
+}
+
+var _resumenPivotDrag = null;
+
+function _moveResumenAnalysisColumn(table, fromIndex, toIndex){
+  if(!table || fromIndex === toIndex) return;
+  var columnCount = table.querySelectorAll('thead th[data-field]').length;
+  Array.prototype.forEach.call(table.rows, function(row){
+    if(row.children.length !== columnCount) return;
+    var moving = row.children[fromIndex];
+    var target = row.children[toIndex];
+    if(!moving || !target) return;
+    if(fromIndex < toIndex) row.insertBefore(moving, target.nextSibling);
+    else row.insertBefore(moving, target);
+  });
+}
+
+function _saveResumenAnalysisColumnOrder(table){
+  if(!table) return;
+  if(!state.resumenAnalysisColumnOrders) state.resumenAnalysisColumnOrders = {};
+  var grid = table.getAttribute('data-analysis-grid');
+  state.resumenAnalysisColumnOrders[grid] = Array.prototype.map.call(
+    table.querySelectorAll('thead th[data-field]'),
+    function(th){ return th.getAttribute('data-field'); }
+  );
+}
+
+function _restoreResumenAnalysisColumnOrders(){
+  var orders = state.resumenAnalysisColumnOrders || {};
+  document.querySelectorAll('.analysis-table[data-analysis-grid]').forEach(function(table){
+    var order = orders[table.getAttribute('data-analysis-grid')];
+    var columnCount = table.querySelectorAll('thead th[data-field]').length;
+    if(!order || order.length !== columnCount) return;
+    order.forEach(function(field, targetIndex){
+      var headers = Array.prototype.slice.call(table.querySelectorAll('thead th[data-field]'));
+      var fromIndex = headers.findIndex(function(th){ return th.getAttribute('data-field') === field; });
+      if(fromIndex >= 0 && fromIndex !== targetIndex) _moveResumenAnalysisColumn(table, fromIndex, targetIndex);
+    });
+  });
+}
+
+function resumenPivotDragStart(event){
+  var header = event.currentTarget;
+  var table = header.closest('table');
+  _resumenPivotDrag = {
+    table:table,
+    grid:table && table.getAttribute('data-analysis-grid'),
+    index:Array.prototype.indexOf.call(header.parentNode.children, header)
+  };
+  header.classList.add('dragging');
+  if(event.dataTransfer){
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', header.getAttribute('data-field') || 'field');
+  }
+}
+
+function resumenPivotDragOver(event){
+  if(!_resumenPivotDrag) return;
+  var table = event.currentTarget.closest('table');
+  if(!table || table.getAttribute('data-analysis-grid') !== _resumenPivotDrag.grid) return;
+  event.preventDefault();
+  event.currentTarget.classList.add('drag-over');
+  if(event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+}
+
+function resumenPivotDragLeave(event){
+  event.currentTarget.classList.remove('drag-over');
+}
+
+function resumenPivotDrop(event){
+  event.preventDefault();
+  var targetHeader = event.currentTarget;
+  var table = targetHeader.closest('table');
+  targetHeader.classList.remove('drag-over');
+  if(!_resumenPivotDrag || !table || table !== _resumenPivotDrag.table) return;
+  var toIndex = Array.prototype.indexOf.call(targetHeader.parentNode.children, targetHeader);
+  _moveResumenAnalysisColumn(table, _resumenPivotDrag.index, toIndex);
+  _saveResumenAnalysisColumnOrder(table);
+  resumenPivotDragEnd();
+}
+
+function resumenPivotDragEnd(){
+  document.querySelectorAll('.analysis-field-header.dragging,.analysis-field-header.drag-over').forEach(function(header){
+    header.classList.remove('dragging','drag-over');
+  });
+  _resumenPivotDrag = null;
+}
+
+document.addEventListener('mouseup', function(event){
+  if(_resumenPivotDrag && (!event.target || !event.target.closest || !event.target.closest('.analysis-field-header'))){
+    resumenPivotDragEnd();
+  }
+});
+
+function toggleResumenAnalisis(forceOpen){
+  var wasOpen = state.resumenAnalisisOpen === true;
+  state.resumenAnalisisOpen = typeof forceOpen === 'boolean' ? forceOpen : !wasOpen;
+  var panel = document.getElementById('resumenAnalysisPanel');
+  var btn = document.getElementById('btnResumenAnalisis');
+  if(panel){
+    panel.style.display = state.resumenAnalisisOpen ? 'flex' : 'none';
+    panel.classList.toggle('open', state.resumenAnalisisOpen);
+    panel.setAttribute('aria-hidden', state.resumenAnalisisOpen ? 'false' : 'true');
+  }
+  document.body.classList.toggle('resumen-analysis-open', state.resumenAnalisisOpen);
+  if(btn) btn.className = state.resumenAnalisisOpen ? 'mode-btn active' : 'mode-btn';
+  if(state.resumenAnalisisOpen){
+    renderResumenAnalysis();
+    var closeBtn = panel && panel.querySelector('.resumen-analysis-close');
+    if(closeBtn) setTimeout(function(){ closeBtn.focus(); }, 0);
+  } else if(btn) {
+    btn.focus();
+  }
+}
+
+function setResumenAnalysisPeriodMode(mode){
+  state.resumenAnalysisPeriodMode = mode === 'day' ? 'day' : 'week';
+  state.resumenAnalysisDayMenuOpen = false;
+  state.resumenAnalysisColumnOrders = {};
+  renderResumenAnalysis();
+}
+
+var _resumenAnalysisPeriodDragMode = null;
+var _resumenAnalysisPeriodDragGhost = null;
+
+function _resumenAnalysisDragToken(mode){
+  var token = String(mode || '');
+  if(/^day:[1-7]$/.test(token)) return token;
+  if(token === 'product') return token;
+  return 'week';
+}
+
+function _clearResumenAnalysisPeriodDragVisuals(){
+  if(_resumenAnalysisPeriodDragGhost && _resumenAnalysisPeriodDragGhost.parentNode){
+    _resumenAnalysisPeriodDragGhost.parentNode.removeChild(_resumenAnalysisPeriodDragGhost);
+  }
+  _resumenAnalysisPeriodDragGhost = null;
+  document.body.classList.remove('analysis-period-is-dragging');
+  Array.prototype.forEach.call(document.querySelectorAll('.analysis-period-field.dragging'), function(field){
+    field.classList.remove('dragging');
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.analysis-period-dropzone.drag-over'), function(zone){
+    zone.classList.remove('drag-over');
+  });
+}
+
+function _moveResumenAnalysisPeriodGhost(event){
+  if(!_resumenAnalysisPeriodDragGhost || !event) return;
+  _resumenAnalysisPeriodDragGhost.style.left = (event.clientX + 12)+'px';
+  _resumenAnalysisPeriodDragGhost.style.top = (event.clientY + 10)+'px';
+}
+
+function resumenAnalysisPeriodMouseStart(event, mode){
+  if(event && typeof event.button === 'number' && event.button !== 0) return;
+  _clearResumenAnalysisPeriodDragVisuals();
+  _resumenAnalysisPeriodDragMode = _resumenAnalysisDragToken(mode);
+  if(event && event.currentTarget) event.currentTarget.classList.add('dragging');
+  _resumenAnalysisPeriodDragGhost = document.createElement('div');
+  _resumenAnalysisPeriodDragGhost.className = 'analysis-period-drag-ghost';
+  var dayNames = ['','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  var draggedDay = _resumenAnalysisPeriodDragMode.indexOf('day:') === 0 ? parseInt(_resumenAnalysisPeriodDragMode.split(':')[1],10) : 0;
+  _resumenAnalysisPeriodDragGhost.textContent = draggedDay ? dayNames[draggedDay] : (_resumenAnalysisPeriodDragMode === 'product' ? 'Product' : 'Week');
+  document.body.appendChild(_resumenAnalysisPeriodDragGhost);
+  document.body.classList.add('analysis-period-is-dragging');
+  _moveResumenAnalysisPeriodGhost(event);
+  requestAnimationFrame(function(){
+    if(_resumenAnalysisPeriodDragGhost) _resumenAnalysisPeriodDragGhost.classList.add('visible');
+  });
+}
+
+function resumenAnalysisPeriodMouseEnter(event){
+  if(!_resumenAnalysisPeriodDragMode) return;
+  if(event && event.currentTarget) event.currentTarget.classList.add('drag-over');
+}
+
+function resumenAnalysisPeriodMouseLeave(event){
+  if(!_resumenAnalysisPeriodDragMode) return;
+  if(event && event.currentTarget) event.currentTarget.classList.remove('drag-over');
+}
+
+function resumenAnalysisPeriodDragStart(event, mode){
+  _resumenAnalysisPeriodDragMode = _resumenAnalysisDragToken(mode);
+  if(event && event.dataTransfer){
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', _resumenAnalysisPeriodDragMode);
+  }
+  if(event && event.currentTarget) event.currentTarget.classList.add('dragging');
+}
+
+function resumenAnalysisPeriodDragEnd(event){
+  _resumenAnalysisPeriodDragMode = null;
+  _clearResumenAnalysisPeriodDragVisuals();
+}
+
+function resumenAnalysisPeriodDragOver(event){
+  if(event) event.preventDefault();
+  if(event && event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  if(event && event.currentTarget) event.currentTarget.classList.add('drag-over');
+}
+
+function resumenAnalysisPeriodDragLeave(event){
+  if(event && event.currentTarget) event.currentTarget.classList.remove('drag-over');
+}
+
+function resumenAnalysisPeriodDrop(event){
+  if(event){
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  var mode = _resumenAnalysisPeriodDragMode;
+  if(event && event.dataTransfer){
+    mode = event.dataTransfer.getData('text/plain') || mode;
+  }
+  if(!mode){
+    if(event && event.currentTarget) event.currentTarget.classList.remove('drag-over');
+    return;
+  }
+  _clearResumenAnalysisPeriodDragVisuals();
+  var dayMatch = /^day:([1-7])$/.exec(String(mode || ''));
+  if(mode === 'product'){
+    state.resumenAnalysisProductField = true;
+    state.resumenExpandedStores = {};
+    getTiendasActivas().forEach(function(store){ state.resumenExpandedStores[store] = true; });
+  } else if(dayMatch){
+    var droppedDay = parseInt(dayMatch[1],10);
+    var selectedDays = state.resumenAnalysisPeriodMode === 'day' && Array.isArray(state.resumenAnalysisSelectedDays)
+      ? state.resumenAnalysisSelectedDays.slice()
+      : [];
+    if(selectedDays.indexOf(droppedDay) < 0) selectedDays.push(droppedDay);
+    state.resumenAnalysisSelectedDays = selectedDays.sort(function(a,b){ return a-b; });
+    state.resumenAnalysisPeriodMode = 'day';
+  } else {
+    state.resumenAnalysisPeriodMode = 'week';
+  }
+  state.resumenAnalysisDayMenuOpen = false;
+  state.resumenAnalysisColumnOrders = {};
+  _resumenAnalysisPeriodDragMode = null;
+  renderResumenAnalysis();
+}
+
+function removeResumenAnalysisDay(day, event){
+  if(event){ event.preventDefault(); event.stopPropagation(); }
+  var selected = parseInt(day,10);
+  var days = Array.isArray(state.resumenAnalysisSelectedDays) ? state.resumenAnalysisSelectedDays.slice() : [];
+  var position = days.indexOf(selected);
+  if(position >= 0) days.splice(position,1);
+  state.resumenAnalysisSelectedDays = days;
+  if(!days.length) state.resumenAnalysisPeriodMode = 'week';
+  state.resumenAnalysisColumnOrders = {};
+  renderResumenAnalysis();
+}
+
+function removeResumenAnalysisProductField(event){
+  if(event){ event.preventDefault(); event.stopPropagation(); }
+  state.resumenAnalysisProductField = false;
+  state.resumenExpandedStores = {};
+  state.resumenAnalysisColumnOrders = {};
+  renderResumenAnalysis();
+}
+
+function toggleResumenAnalysisDayMenu(event){
+  if(event){ event.preventDefault(); event.stopPropagation(); }
+  var wasDay = state.resumenAnalysisPeriodMode === 'day';
+  state.resumenAnalysisPeriodMode = 'day';
+  state.resumenAnalysisDayMenuOpen = wasDay ? !state.resumenAnalysisDayMenuOpen : true;
+  state.resumenAnalysisColumnOrders = {};
+  renderResumenAnalysis();
+}
+
+function toggleResumenAnalysisSelectedDay(day, checked){
+  var selected = parseInt(day,10);
+  if(selected < 1 || selected > 7) return;
+  var days = Array.isArray(state.resumenAnalysisSelectedDays) ? state.resumenAnalysisSelectedDays.slice() : [];
+  var position = days.indexOf(selected);
+  if(checked && position < 0) days.push(selected);
+  if(!checked && position >= 0 && days.length > 1) days.splice(position,1);
+  state.resumenAnalysisSelectedDays = days.sort(function(a,b){ return a-b; });
+  state.resumenAnalysisDayMenuOpen = true;
+  state.resumenAnalysisColumnOrders = {};
+  renderResumenAnalysis();
+}
+
+function renderResumenAnalysis(){
+  var host = document.getElementById('resumenAnalysisContent');
+  var panel = document.getElementById('resumenAnalysisPanel');
+  var btn = document.getElementById('btnResumenAnalisis');
+  if(!host || !panel) return;
+  if(typeof state.resumenAnalisisOpen !== 'boolean') state.resumenAnalisisOpen = false;
+  panel.style.display = state.resumenAnalisisOpen ? 'flex' : 'none';
+  panel.classList.toggle('open', state.resumenAnalisisOpen);
+  panel.setAttribute('aria-hidden', state.resumenAnalisisOpen ? 'false' : 'true');
+  if(btn) btn.className = state.resumenAnalisisOpen ? 'mode-btn active' : 'mode-btn';
+  if(!state.resumenAnalisisOpen) return;
+
+  if(!state.resumenAnalysisPeriodMode) state.resumenAnalysisPeriodMode = 'week';
+  var analysis = _collectResumenPosAnalysisView(state.resumenAnalysisPeriodMode);
+  var selectedWeeks = analysis.weeks;
+  var weeks = analysis.periods;
+  var layout = document.querySelector('#viewResumen .resumen-layout');
+  if(selectedWeeks.length < 2){
+    host.innerHTML = '';
+    panel.style.display = 'none';
+    if(btn) btn.classList.add('analysis-unavailable');
+    if(layout) layout.classList.add('analysis-unavailable');
+    return;
+  }
+  if(btn) btn.classList.remove('analysis-unavailable');
+  if(layout) layout.classList.remove('analysis-unavailable');
+  panel.style.display = 'flex';
+
+  var storeRows = _resumenAnalysisRows(analysis.byStore, weeks, analysis.baselineKeys, analysis.currentKeys, analysis.mode !== 'day').filter(function(row){
+    return weeks.some(function(week){ return row.weekValues[week] !== 0; });
+  });
+  var productRows = _resumenAnalysisRows(analysis.byProduct, weeks, analysis.baselineKeys, analysis.currentKeys, analysis.mode !== 'day').filter(function(row){
+    return weeks.some(function(week){ return row.weekValues[week] !== 0; });
+  });
+  window._resumenAnalysisStoreKeys = storeRows.map(function(row){ return row.key; });
+  window._resumenAnalysisDayTreeKeys = {
+    tienda:storeRows.map(function(row){ return row.key; }),
+    producto:productRows.map(function(row){ return row.key; })
+  };
+  window._resumenAnalysisStoreProductKeys = {};
+
+  function managementTable(title, itemLabel, rows){
+    var isStoreTable = title === 'Tiendas' || title === 'Stores';
+    var gridKey = isStoreTable ? 'tienda' : 'producto';
+    var differenceHeaders = analysis.comparisonPairs.map(function(pair){
+      return {field:'diff-'+pair.from+'-'+pair.to, label:pair.label};
+    });
+    var hierarchyHeaders = [{field:'name', label:isStoreTable ? 'Store' : itemLabel}];
+    if(isStoreTable && state.resumenAnalysisProductField) hierarchyHeaders.push({field:'product', label:'Product'});
+    if(isStoreTable && analysis.mode === 'day') hierarchyHeaders.push({field:'day', label:'Day'});
+    var headers = hierarchyHeaders
+      .concat(weeks.map(function(week){ return {field:'week-'+week, label:analysis.periodLabels[week] || resumenSemLabel(week)}; }))
+      .concat(differenceHeaders)
+      .concat([
+        {field:'difference', label:'Dif. total'},
+        {field:'variation', label:'Var. total'},
+        {field:'status', label:'Estado'}
+      ]);
+    var columnCount = headers.length;
+    var gridWidth = Math.max(760, 610 + (weeks.length * 72) + (differenceHeaders.length * 90) + ((hierarchyHeaders.length - 1) * 105));
+    var headerHtml = headers.map(function(header){
+      return '<th class="analysis-field-header" data-field="'+header.field+'" '+
+        'onmousedown="resumenPivotDragStart(event)" '+
+        'onmouseenter="resumenPivotDragOver(event)" onmouseleave="resumenPivotDragLeave(event)" '+
+        'onmouseup="resumenPivotDrop(event)" title="Arrastra para mover esta columna">'+
+        '<span>'+header.label+'</span><span class="analysis-field-grip" aria-hidden="true"></span></th>';
+    }).join('');
+    function treeMetricCells(metricRow){
+      var pctText = metricRow.pct === null ? (metricRow.current > 0 ? 'Nuevo' : '—') : ((metricRow.pct > 0 ? '+' : '') + metricRow.pct.toFixed(1) + '%');
+      var weekCells = weeks.map(function(week){
+        return '<td data-field="week-'+week+'">'+_resumenAnalysisNumber(metricRow.weekValues[week])+'</td>';
+      }).join('');
+      var differenceCells = analysis.comparisonPairs.map(function(pair){
+        var value = (metricRow.weekValues[pair.to] || 0) - (metricRow.weekValues[pair.from] || 0);
+        var valueClass = value > 0 ? 'up' : value < 0 ? 'down' : 'stable';
+        return '<td data-field="diff-'+pair.from+'-'+pair.to+'" class="analysis-change '+valueClass+'"><strong>'+_resumenAnalysisDelta(value)+'</strong></td>';
+      }).join('');
+      return weekCells+
+        differenceCells+
+        '<td data-field="difference" class="analysis-change '+metricRow.status.key+'"><strong>'+_resumenAnalysisDelta(metricRow.delta)+'</strong></td>'+
+        '<td data-field="variation" class="analysis-percent '+metricRow.status.key+'">'+pctText+'</td>'+
+        '<td data-field="status"><span class="analysis-status '+metricRow.status.key+'">'+metricRow.status.label+'</span></td>';
+    }
+    var order = [
+      {key:'up', label:'SUBIENDO'},
+      {key:'down', label:'BAJANDO'},
+      {key:'stable', label:'SIN MOVIMIENTO / VARIABLE'}
+    ];
+    var body = '';
+    order.forEach(function(group){
+      var groupRows = rows.filter(function(row){ return row.status.key === group.key; });
+      if(!groupRows.length) return;
+      groupRows.forEach(function(row){
+        var pctText = row.pct === null ? (row.current > 0 ? 'Nuevo' : '—') : ((row.pct > 0 ? '+' : '') + row.pct.toFixed(1) + '%');
+        if(isStoreTable && analysis.mode === 'day' && !state.resumenAnalysisProductField){
+          var directDayNames = ['','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+          var directStoreDaySource = ((analysis.byStoreDay || {})[row.key]) || {};
+          var directSingleDay = analysis.selectedDays.length === 1;
+          var directStoreRowspan = analysis.selectedDays.length + (directSingleDay ? 0 : 1);
+          analysis.selectedDays.forEach(function(day, dayIndex){
+            var syntheticDirectDay = {};
+            syntheticDirectDay[directDayNames[day]] = directStoreDaySource[day] || {};
+            var directDayRow = _resumenAnalysisRows(syntheticDirectDay, weeks, analysis.baselineKeys, analysis.currentKeys, false)[0];
+            body += '<tr class="analysis-pivot-day-row analysis-pivot-direct-day">'+
+              (dayIndex === 0 ? '<td data-field="name" rowspan="'+directStoreRowspan+'" class="analysis-pivot-store-cell">'+_resumenAnalysisEscape(row.key)+'</td>' : '')+
+              '<td data-field="day">'+directDayNames[day]+'</td>'+
+              treeMetricCells(directDayRow)+'</tr>';
+          });
+          if(!directSingleDay){
+            body += '<tr class="analysis-pivot-store-total"><td data-field="day">Store Total</td>'+treeMetricCells(row)+'</tr>';
+          }
+          return;
+        }
+        if(isStoreTable && analysis.mode === 'week' && state.resumenAnalysisProductField){
+          var weeklyStoreIndex = window._resumenAnalysisStoreKeys.indexOf(row.key);
+          var weeklyStoreExpanded = state.resumenExpandedStores && state.resumenExpandedStores[row.key];
+          var weeklyProductRows = _resumenAnalysisRows((analysis.byPair[row.key] || {}), weeks, analysis.baselineKeys, analysis.currentKeys, true).filter(function(productRow){
+            return weeks.some(function(week){ return productRow.weekValues[week] !== 0; });
+          });
+          if(!weeklyStoreExpanded || !weeklyProductRows.length){
+            body += '<tr class="analysis-pivot-store-summary">'+
+              '<td data-field="name" class="analysis-pivot-store-cell" onclick="toggleResumenStoreProducts('+weeklyStoreIndex+')" title="Show products"><span class="analysis-expander" aria-hidden="true">&#9656;</span>'+_resumenAnalysisEscape(row.key)+'</td>'+
+              '<td data-field="product" class="analysis-pivot-total-label">Store Total</td>'+
+              treeMetricCells(row)+'</tr>';
+            return;
+          }
+          var weeklyStoreRowspan = weeklyProductRows.length + 1;
+          weeklyProductRows.forEach(function(productRow, productIndex){
+            body += '<tr class="analysis-pivot-product-total analysis-pivot-week-product-row">'+
+              (productIndex === 0 ? '<td data-field="name" rowspan="'+weeklyStoreRowspan+'" class="analysis-pivot-store-cell expanded" onclick="toggleResumenStoreProducts('+weeklyStoreIndex+')" title="Hide products"><span class="analysis-expander" aria-hidden="true">&#9662;</span>'+_resumenAnalysisEscape(row.key)+'</td>' : '')+
+              '<td data-field="product" class="analysis-pivot-product-cell analysis-pivot-product-static">'+_resumenAnalysisEscape(productRow.key.replace(/^BQT\s+/i,''))+'</td>'+
+              treeMetricCells(productRow)+'</tr>';
+          });
+          body += '<tr class="analysis-pivot-store-total"><td data-field="product">Store Total</td>'+treeMetricCells(row)+'</tr>';
+          return;
+        }
+        if(isStoreTable && analysis.mode === 'day' && state.resumenAnalysisProductField){
+          var pivotStoreIndex = window._resumenAnalysisStoreKeys.indexOf(row.key);
+          var pivotStoreExpanded = state.resumenExpandedStores && state.resumenExpandedStores[row.key];
+          var pivotStoreProducts = _resumenAnalysisRows((analysis.byPair[row.key] || {}), weeks, analysis.baselineKeys, analysis.currentKeys, false).filter(function(productRow){
+            return weeks.some(function(week){ return productRow.weekValues[week] !== 0; });
+          });
+          window._resumenAnalysisStoreProductKeys[pivotStoreIndex] = pivotStoreProducts.map(function(productRow){ return productRow.key; });
+          if(!pivotStoreExpanded || !pivotStoreProducts.length){
+            body += '<tr class="analysis-pivot-store-summary">'+
+              '<td data-field="name" class="analysis-pivot-store-cell" onclick="toggleResumenStoreProducts('+pivotStoreIndex+')" title="Mostrar productos"><span class="analysis-expander" aria-hidden="true">&#9656;</span>'+_resumenAnalysisEscape(row.key)+'</td>'+
+              '<td data-field="product" colspan="2" class="analysis-pivot-total-label">Store Total</td>'+
+              treeMetricCells(row)+'</tr>';
+            return;
+          }
+          var pivotSingleDay = analysis.selectedDays.length === 1;
+          var pivotBlocks = pivotStoreProducts.map(function(productRow, productIndex){
+            var productTreeKey = row.key+'|'+productRow.key;
+            var collapsed = state.resumenCollapsedProductDayTrees && state.resumenCollapsedProductDayTrees[productTreeKey];
+            return {row:productRow, index:productIndex, collapsed:!!collapsed, rowCount:pivotSingleDay ? 1 : 1+(collapsed ? 0 : analysis.selectedDays.length)};
+          });
+          var pivotStoreRowspan = pivotBlocks.reduce(function(sum,block){ return sum+block.rowCount; }, pivotSingleDay ? 0 : 1);
+          var firstPivotRow = true;
+          pivotBlocks.forEach(function(block){
+            var pivotDaySource = ((((analysis.byPairDay || {})[row.key] || {})[block.row.key]) || {});
+            var pivotDayNames = ['','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+            if(pivotSingleDay){
+              var onlyDay = analysis.selectedDays[0];
+              var syntheticOnlyDay = {};
+              syntheticOnlyDay[pivotDayNames[onlyDay]] = pivotDaySource[onlyDay] || {};
+              var onlyDayRow = _resumenAnalysisRows(syntheticOnlyDay, weeks, analysis.baselineKeys, analysis.currentKeys, false)[0];
+              body += '<tr class="analysis-pivot-day-row analysis-pivot-single-day">'+
+                (firstPivotRow ? '<td data-field="name" rowspan="'+pivotStoreRowspan+'" class="analysis-pivot-store-cell expanded" onclick="toggleResumenStoreProducts('+pivotStoreIndex+')" title="Hide products"><span class="analysis-expander" aria-hidden="true">&#9662;</span>'+_resumenAnalysisEscape(row.key)+'</td>' : '')+
+                '<td data-field="product" class="analysis-pivot-product-cell analysis-pivot-product-static">'+_resumenAnalysisEscape(block.row.key.replace(/^BQT\s+/i,''))+'</td>'+
+                '<td data-field="day">'+pivotDayNames[onlyDay]+'</td>'+
+                treeMetricCells(onlyDayRow)+'</tr>';
+              firstPivotRow = false;
+              return;
+            }
+            var productCell = '<td data-field="product" rowspan="'+block.rowCount+'" class="analysis-pivot-product-cell" onclick="toggleResumenAnalysisProductDayTree('+pivotStoreIndex+','+block.index+',event)" title="Mostrar u ocultar días">'+
+              '<span class="analysis-expander" aria-hidden="true">'+(block.collapsed ? '&#9656;' : '&#9662;')+'</span>'+_resumenAnalysisEscape(block.row.key.replace(/^BQT\s+/i,''))+'</td>';
+            body += '<tr class="analysis-pivot-product-total">'+
+              (firstPivotRow ? '<td data-field="name" rowspan="'+pivotStoreRowspan+'" class="analysis-pivot-store-cell expanded" onclick="toggleResumenStoreProducts('+pivotStoreIndex+')" title="Ocultar productos"><span class="analysis-expander" aria-hidden="true">&#9662;</span>'+_resumenAnalysisEscape(row.key)+'</td>' : '')+
+              productCell+
+              '<td data-field="day" class="analysis-pivot-level-total">Product Total</td>'+
+              treeMetricCells(block.row)+'</tr>';
+            firstPivotRow = false;
+            if(!block.collapsed){
+              var pivotDaySource = ((((analysis.byPairDay || {})[row.key] || {})[block.row.key]) || {});
+              analysis.selectedDays.forEach(function(day){
+                var pivotDayNames = ['','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+                var syntheticPivotDay = {};
+                syntheticPivotDay[pivotDayNames[day]] = pivotDaySource[day] || {};
+                var pivotDayRow = _resumenAnalysisRows(syntheticPivotDay, weeks, analysis.baselineKeys, analysis.currentKeys, false)[0];
+                body += '<tr class="analysis-pivot-day-row"><td data-field="day">'+pivotDayNames[day]+'</td>'+treeMetricCells(pivotDayRow)+'</tr>';
+              });
+            }
+          });
+          if(!pivotSingleDay){
+            body += '<tr class="analysis-pivot-store-total"><td data-field="product" colspan="2">Store Total</td>'+treeMetricCells(row)+'</tr>';
+          }
+          return;
+        }
+        var storeIndex = isStoreTable ? window._resumenAnalysisStoreKeys.indexOf(row.key) : -1;
+        var expanded = isStoreTable && state.resumenAnalysisProductField && state.resumenExpandedStores && state.resumenExpandedStores[row.key];
+        var treeIndex = (window._resumenAnalysisDayTreeKeys[gridKey] || []).indexOf(row.key);
+        var treeKey = gridKey+'|'+row.key;
+        var dayTreeCollapsed = state.resumenCollapsedDayTrees && state.resumenCollapsedDayTrees[treeKey];
+        var isDayTree = analysis.mode === 'day';
+        var rowExpanded = isDayTree ? (isStoreTable ? !!expanded : !dayTreeCollapsed) : expanded;
+        var rowAction = isDayTree
+          ? (isStoreTable
+              ? ' class="analysis-store-row analysis-day-tree-parent'+(rowExpanded ? ' expanded' : '')+'" onclick="toggleResumenStoreProducts('+storeIndex+')" title="Mostrar u ocultar productos y días"'
+              : ' class="analysis-store-row analysis-day-tree-parent'+(rowExpanded ? ' expanded' : '')+'" onclick="toggleResumenAnalysisDayTree(\''+gridKey+'\','+treeIndex+')" title="Mostrar u ocultar días"')
+          : (isStoreTable && state.resumenAnalysisProductField ? ' class="analysis-store-row'+(expanded ? ' expanded' : '')+'" onclick="toggleResumenStoreProducts('+storeIndex+')" title="Ver productos de la tienda"' : '');
+        var weekCells = weeks.map(function(week){
+          return '<td data-field="week-'+week+'">'+_resumenAnalysisNumber(row.weekValues[week])+'</td>';
+        }).join('');
+        var differenceCells = analysis.comparisonPairs.map(function(pair){
+          var value = (row.weekValues[pair.to] || 0) - (row.weekValues[pair.from] || 0);
+          var valueClass = value > 0 ? 'up' : value < 0 ? 'down' : 'stable';
+          return '<td data-field="diff-'+pair.from+'-'+pair.to+'" class="analysis-change '+valueClass+'"><strong>'+_resumenAnalysisDelta(value)+'</strong></td>';
+        }).join('');
+        body += '<tr'+rowAction+'>'+
+          '<td data-field="name"'+(isStoreTable ? ' class="analysis-store-base-cell"' : '')+'><span class="analysis-name">'+(((isStoreTable && state.resumenAnalysisProductField) || isDayTree) ? '<span class="analysis-expander" aria-hidden="true">'+(rowExpanded ? '&#9662;' : '&#9656;')+'</span>' : '')+_resumenAnalysisEscape(row.key.replace(/^BQT\s+/i,''))+'</span></td>'+
+          weekCells+
+          differenceCells+
+          '<td data-field="difference" class="analysis-change '+row.status.key+'"><strong>'+_resumenAnalysisDelta(row.delta)+'</strong></td>'+
+          '<td data-field="variation" class="analysis-percent '+row.status.key+'">'+pctText+'</td>'+
+          '<td data-field="status"><span class="analysis-status '+row.status.key+'">'+row.status.label+'</span></td></tr>';
+        if(isDayTree && rowExpanded){
+          var dayNames = ['','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+          if(isStoreTable){
+            var storeProductRows = _resumenAnalysisRows((analysis.byPair[row.key] || {}), weeks, analysis.baselineKeys, analysis.currentKeys, false).filter(function(productRow){
+              return weeks.some(function(week){ return productRow.weekValues[week] !== 0; });
+            });
+            window._resumenAnalysisStoreProductKeys[storeIndex] = storeProductRows.map(function(productRow){ return productRow.key; });
+            storeProductRows.forEach(function(productRow, productIndex){
+              var productTreeKey = row.key+'|'+productRow.key;
+              var productCollapsed = state.resumenCollapsedProductDayTrees && state.resumenCollapsedProductDayTrees[productTreeKey];
+              var productPctText = productRow.pct === null ? (productRow.current > 0 ? 'Nuevo' : '—') : ((productRow.pct > 0 ? '+' : '') + productRow.pct.toFixed(1) + '%');
+              var productWeekCells = weeks.map(function(week){
+                return '<td data-field="week-'+week+'">'+_resumenAnalysisNumber(productRow.weekValues[week])+'</td>';
+              }).join('');
+              var productDifferenceCells = analysis.comparisonPairs.map(function(pair){
+                var value = (productRow.weekValues[pair.to] || 0) - (productRow.weekValues[pair.from] || 0);
+                var valueClass = value > 0 ? 'up' : value < 0 ? 'down' : 'stable';
+                return '<td data-field="diff-'+pair.from+'-'+pair.to+'" class="analysis-change '+valueClass+'"><strong>'+_resumenAnalysisDelta(value)+'</strong></td>';
+              }).join('');
+              body += '<tr class="analysis-day-product-row'+(!productCollapsed ? ' expanded' : '')+'" onclick="toggleResumenAnalysisProductDayTree('+storeIndex+','+productIndex+',event)" title="Mostrar u ocultar días del producto">'+
+                '<td data-field="name"><span class="analysis-product-tree-indent" aria-hidden="true">└</span><span class="analysis-expander" aria-hidden="true">'+(!productCollapsed ? '&#9662;' : '&#9656;')+'</span><span class="analysis-product-tree-name">'+_resumenAnalysisEscape(productRow.key.replace(/^BQT\s+/i,''))+'</span></td>'+
+                productWeekCells+
+                productDifferenceCells+
+                '<td data-field="difference" class="analysis-change '+productRow.status.key+'"><strong>'+_resumenAnalysisDelta(productRow.delta)+'</strong></td>'+
+                '<td data-field="variation" class="analysis-percent '+productRow.status.key+'">'+productPctText+'</td>'+
+                '<td data-field="status"><span class="analysis-status '+productRow.status.key+'">'+productRow.status.label+'</span></td></tr>';
+              if(!productCollapsed){
+                var productDaySource = ((((analysis.byPairDay || {})[row.key] || {})[productRow.key]) || {});
+                analysis.selectedDays.forEach(function(day){
+                  var syntheticProductDay = {};
+                  syntheticProductDay[dayNames[day]] = productDaySource[day] || {};
+                  var productDayRow = _resumenAnalysisRows(syntheticProductDay, weeks, analysis.baselineKeys, analysis.currentKeys, false)[0];
+                  if(!productDayRow) return;
+                  var productDayPctText = productDayRow.pct === null ? (productDayRow.current > 0 ? 'Nuevo' : '—') : ((productDayRow.pct > 0 ? '+' : '') + productDayRow.pct.toFixed(1) + '%');
+                  var productDayWeekCells = weeks.map(function(week){
+                    return '<td data-field="week-'+week+'">'+_resumenAnalysisNumber(productDayRow.weekValues[week])+'</td>';
+                  }).join('');
+                  var productDayDifferenceCells = analysis.comparisonPairs.map(function(pair){
+                    var value = (productDayRow.weekValues[pair.to] || 0) - (productDayRow.weekValues[pair.from] || 0);
+                    var valueClass = value > 0 ? 'up' : value < 0 ? 'down' : 'stable';
+                    return '<td data-field="diff-'+pair.from+'-'+pair.to+'" class="analysis-change '+valueClass+'"><strong>'+_resumenAnalysisDelta(value)+'</strong></td>';
+                  }).join('');
+                  body += '<tr class="analysis-day-tree-row analysis-product-day-row">'+
+                    '<td data-field="name"><span class="analysis-day-tree-branch" aria-hidden="true">└</span><span class="analysis-day-tree-name">'+dayNames[day]+'</span></td>'+
+                    productDayWeekCells+
+                    productDayDifferenceCells+
+                    '<td data-field="difference" class="analysis-change '+productDayRow.status.key+'"><strong>'+_resumenAnalysisDelta(productDayRow.delta)+'</strong></td>'+
+                    '<td data-field="variation" class="analysis-percent '+productDayRow.status.key+'">'+productDayPctText+'</td>'+
+                    '<td data-field="status"><span class="analysis-status '+productDayRow.status.key+'">'+productDayRow.status.label+'</span></td></tr>';
+                });
+              }
+            });
+          } else {
+          var daySourceRoot = isStoreTable ? (analysis.byStoreDay || {}) : (analysis.byProductDay || {});
+          var itemDaySource = daySourceRoot[row.key] || {};
+          analysis.selectedDays.forEach(function(day){
+            var syntheticSource = {};
+            syntheticSource[dayNames[day]] = itemDaySource[day] || {};
+            var dayRow = _resumenAnalysisRows(syntheticSource, weeks, analysis.baselineKeys, analysis.currentKeys, false)[0];
+            if(!dayRow) return;
+            var dayPctText = dayRow.pct === null ? (dayRow.current > 0 ? 'Nuevo' : '—') : ((dayRow.pct > 0 ? '+' : '') + dayRow.pct.toFixed(1) + '%');
+            var dayWeekCells = weeks.map(function(week){
+              return '<td data-field="week-'+week+'">'+_resumenAnalysisNumber(dayRow.weekValues[week])+'</td>';
+            }).join('');
+            var dayDifferenceCells = analysis.comparisonPairs.map(function(pair){
+              var value = (dayRow.weekValues[pair.to] || 0) - (dayRow.weekValues[pair.from] || 0);
+              var valueClass = value > 0 ? 'up' : value < 0 ? 'down' : 'stable';
+              return '<td data-field="diff-'+pair.from+'-'+pair.to+'" class="analysis-change '+valueClass+'"><strong>'+_resumenAnalysisDelta(value)+'</strong></td>';
+            }).join('');
+            body += '<tr class="analysis-day-tree-row">'+
+              '<td data-field="name"><span class="analysis-day-tree-branch" aria-hidden="true">└</span><span class="analysis-day-tree-name">'+dayNames[day]+'</span></td>'+
+              dayWeekCells+
+              dayDifferenceCells+
+              '<td data-field="difference" class="analysis-change '+dayRow.status.key+'"><strong>'+_resumenAnalysisDelta(dayRow.delta)+'</strong></td>'+
+              '<td data-field="variation" class="analysis-percent '+dayRow.status.key+'">'+dayPctText+'</td>'+
+              '<td data-field="status"><span class="analysis-status '+dayRow.status.key+'">'+dayRow.status.label+'</span></td></tr>';
+          });
+          }
+        }
+        if(!isDayTree && expanded){
+          var productDetailRows = _resumenAnalysisRows((analysis.byPair[row.key] || {}), weeks, analysis.baselineKeys, analysis.currentKeys, analysis.mode !== 'day').filter(function(productRow){
+            return weeks.some(function(week){ return productRow.weekValues[week] !== 0; });
+          });
+          body += '<tr class="analysis-drill-heading"><td colspan="'+columnCount+'">Productos de '+_resumenAnalysisEscape(row.key.replace(/^SC\s+/i,''))+'</td></tr>';
+          productDetailRows.forEach(function(productRow){
+            var productPctText = productRow.pct === null ? (productRow.current > 0 ? 'Nuevo' : '—') : ((productRow.pct > 0 ? '+' : '') + productRow.pct.toFixed(1) + '%');
+            var detailWeekCells = weeks.map(function(week){
+              return '<td data-field="week-'+week+'">'+_resumenAnalysisNumber(productRow.weekValues[week])+'</td>';
+            }).join('');
+            var detailDifferenceCells = analysis.comparisonPairs.map(function(pair){
+              var value = (productRow.weekValues[pair.to] || 0) - (productRow.weekValues[pair.from] || 0);
+              var valueClass = value > 0 ? 'up' : value < 0 ? 'down' : 'stable';
+              return '<td data-field="diff-'+pair.from+'-'+pair.to+'" class="analysis-change '+valueClass+'"><strong>'+_resumenAnalysisDelta(value)+'</strong></td>';
+            }).join('');
+            body += '<tr class="analysis-drill-row">'+
+              '<td data-field="name"><span class="analysis-drill-name">'+_resumenAnalysisEscape(productRow.key.replace(/^BQT\s+/i,''))+'</span></td>'+
+              detailWeekCells+
+              detailDifferenceCells+
+              '<td data-field="difference" class="analysis-change '+productRow.status.key+'"><strong>'+_resumenAnalysisDelta(productRow.delta)+'</strong></td>'+
+              '<td data-field="variation" class="analysis-percent '+productRow.status.key+'">'+productPctText+'</td>'+
+              '<td data-field="status"><span class="analysis-status '+productRow.status.key+'">'+productRow.status.label+'</span></td></tr>';
+          });
+        }
+      });
+    });
+    var totalPrevious = rows.reduce(function(sum,row){ return sum + row.previous; }, 0);
+    var totalCurrent = rows.reduce(function(sum,row){ return sum + row.current; }, 0);
+    var totalDifference = totalCurrent - totalPrevious;
+    var totalPercent = totalPrevious ? (totalDifference / totalPrevious) * 100 : null;
+    var totalClass = totalDifference > 0 ? 'up' : totalDifference < 0 ? 'down' : 'stable';
+    var totalPercentText = totalPercent === null ? '—' : ((totalPercent > 0 ? '+' : '') + totalPercent.toFixed(1) + '%');
+    var totalByWeek = {};
+    var totalWeekCells = weeks.map(function(week){
+      var total = rows.reduce(function(sum,row){ return sum + (row.weekValues[week] || 0); }, 0);
+      totalByWeek[week] = total;
+      return '<td data-field="week-'+week+'">'+_resumenAnalysisNumber(total)+'</td>';
+    }).join('');
+    var totalDifferenceCells = analysis.comparisonPairs.map(function(pair){
+      var value = (totalByWeek[pair.to] || 0) - (totalByWeek[pair.from] || 0);
+      var valueClass = value > 0 ? 'up' : value < 0 ? 'down' : 'stable';
+      return '<td data-field="diff-'+pair.from+'-'+pair.to+'" class="'+valueClass+'">'+_resumenAnalysisDelta(value)+'</td>';
+    }).join('');
+    var totalLabelCell = isStoreTable && hierarchyHeaders.length > 1
+      ? '<td data-field="name" colspan="'+hierarchyHeaders.length+'">Total</td>'
+      : '<td data-field="name">Total</td>';
+    var totalRow = '<tfoot><tr class="analysis-total-row">'+totalLabelCell+
+      totalWeekCells+
+      totalDifferenceCells+
+      '<td data-field="difference" class="'+totalClass+'">'+_resumenAnalysisDelta(totalDifference)+'</td>'+
+      '<td data-field="variation" class="'+totalClass+'">'+totalPercentText+'</td><td data-field="status"></td></tr></tfoot>';
+    var activeDayNames = ['','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    var periodFieldsHtml = analysis.mode === 'day'
+      ? analysis.selectedDays.map(function(day){
+          return '<button class="analysis-period-active-field analysis-period-active-day" onclick="removeResumenAnalysisDay('+day+',event)" title="Quitar '+activeDayNames[day]+'" type="button"><span>'+activeDayNames[day]+'</span><b aria-hidden="true">×</b></button>';
+        }).join('')
+      : '<span class="analysis-period-active-field">Week</span>';
+    var productActiveField = state.resumenAnalysisProductField
+      ? '<button class="analysis-period-active-field analysis-period-active-product" onclick="removeResumenAnalysisProductField(event)" title="Remove Product" type="button"><span>Product</span><b aria-hidden="true">×</b></button>'
+      : '';
+    var activeFieldsHtml = productActiveField+periodFieldsHtml;
+    var periodDropzone = '<span class="analysis-period-dropzone" onmouseenter="resumenAnalysisPeriodMouseEnter(event)" onmouseleave="resumenAnalysisPeriodMouseLeave(event)" onmouseup="resumenAnalysisPeriodDrop(event)" ondragover="resumenAnalysisPeriodDragOver(event)" ondragleave="resumenAnalysisPeriodDragLeave(event)" ondrop="resumenAnalysisPeriodDrop(event)">'+
+      activeFieldsHtml+'<small>Arrastra campos aquí</small></span>';
+    return '<section class="analysis-management-section" style="width:min('+gridWidth+'px,100%)"><h3><span class="analysis-section-title">'+title+'</span>'+periodDropzone+'</h3>'+
+      '<div class="analysis-table-wrap"><table class="analysis-table" data-analysis-grid="'+gridKey+'" style="min-width:'+gridWidth+'px"><thead><tr>'+headerHtml+'</tr></thead><tbody>'+
+      (body || '<tr><td colspan="'+columnCount+'" class="analysis-no-rows">No hay ventas para comparar.</td></tr>')+
+      '</tbody>'+totalRow+'</table></div></section>';
+  }
+
+  var fieldIcons = '<span class="analysis-period-field-icons" aria-hidden="true"><i class="analysis-period-arrow"></i><i class="analysis-period-filter"></i></span>';
+  var weekField = '<button class="analysis-period-field'+(analysis.mode === 'week' ? ' active' : '')+'" onmousedown="resumenAnalysisPeriodMouseStart(event,\'week\')" onclick="event.preventDefault()" title="Arrastra al encabezado de la tabla" type="button"><span>Week</span>'+fieldIcons+'</button>';
+  var productField = '<button class="analysis-period-field analysis-period-product-field'+(state.resumenAnalysisProductField ? ' active' : '')+'" onmousedown="resumenAnalysisPeriodMouseStart(event,\'product\')" onclick="event.preventDefault()" title="Drag Product into the table header" type="button"><span>Product</span>'+fieldIcons+'</button>';
+  var dayFields = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(function(label,index){
+    var day = index + 1;
+    var isActive = analysis.mode === 'day' && analysis.selectedDays.indexOf(day) >= 0;
+    return '<button class="analysis-period-field analysis-period-day-field'+(isActive ? ' active' : '')+'" onmousedown="resumenAnalysisPeriodMouseStart(event,\'day:'+day+'\')" onclick="event.preventDefault()" title="Arrastra '+label+' al encabezado" type="button"><span>'+label+'</span>'+fieldIcons+'</button>';
+  }).join('');
+  var toolbar = '<div class="analysis-period-toolbar">'+weekField+productField+dayFields+'</div>';
+  host.innerHTML = toolbar+managementTable('Stores', 'Store', storeRows);
+  _restoreResumenAnalysisColumnOrders();
+}
+
+document.addEventListener('keydown', function(event){
+  if(event.key === 'Escape' && state && state.resumenAnalisisOpen === true){
+    if(state.resumenAnalysisDayMenuOpen){
+      state.resumenAnalysisDayMenuOpen = false;
+      renderResumenAnalysis();
+      return;
+    }
+    toggleResumenAnalisis(false);
+  }
+});
+
+document.addEventListener('click', function(event){
+  if(!state || !state.resumenAnalysisDayMenuOpen) return;
+  if(event.target && event.target.closest && event.target.closest('.analysis-period-field-wrap')) return;
+  state.resumenAnalysisDayMenuOpen = false;
+  renderResumenAnalysis();
+});
+
+document.addEventListener('mouseup', function(){
+  if(!_resumenAnalysisPeriodDragMode) return;
+  _resumenAnalysisPeriodDragMode = null;
+  _clearResumenAnalysisPeriodDragVisuals();
+});
+
+document.addEventListener('mousemove', function(event){
+  if(!_resumenAnalysisPeriodDragMode) return;
+  _moveResumenAnalysisPeriodGhost(event);
+});
+
+function renderResumen(){
   if(window._skipCaptureSaveOnce) {
     window._skipCaptureSaveOnce = false;
   } else {
@@ -3972,6 +4900,7 @@ function _renderResumenImpl(){
     }
   }
   var pivotMode = state.resumenPivot || 'producto';
+  renderResumenAnalysis();
 
   window.updateRemoveCaptureBtn = function(){
     var btn = document.getElementById('btnRemoveCaptureSem');
@@ -4279,7 +5208,7 @@ function _renderResumenImpl(){
       var td1 = document.createElement('td');
       td1.setAttribute('data-group', id1);
       td1.style.cssText = 'position:static;background:'+bg+';padding:3px 6px;white-space:nowrap;font-size:14px;font-weight:600;color:#1565c0;border-right:1px solid #e0e6f0;text-align:left;vertical-align:middle';
-      td1.innerHTML = '<span style="font-size:12px;color:#1565c0">Capture SEM</span><div style="font-size:12px;font-weight:bold;color:#1a3a5c;margin-top:2px;background:#ddeeff;display:inline-block;border-radius:3px;padding:1px 6px"><input type="text" id="csem_'+r1i+'_'+r2i+'_'+wi+'" placeholder="SEM" value="'+(window._nextSemanaProyeccion||'')+'" readonly style="width:50px;border:2px solid #2980b9;border-radius:4px;padding:2px 4px;font-size:13px;text-align:center;background:#eef6fc;color:#0a2a4a;font-weight:bold;outline:none;cursor:not-allowed;"></div><button type="button" title="Eliminar fila" onclick="window.removeCaptureSemRow('+r1i+','+r2i+','+wi+','+ngr+')" style="margin-left:3px;font-size:11px;font-weight:bold;background:#c62828;color:#fff;border:none;border-radius:3px;padding:1px 5px;cursor:pointer;vertical-align:middle">×</button>';
+      td1.innerHTML = '<span style="font-size:13px;font-weight:bold;color:#1565c0">Capture SEM</span><input type="text" id="csem_'+r1i+'_'+r2i+'_'+wi+'" value="'+(window._nextSemanaProyeccion||'')+'" readonly style="width:30px;border:none;background:transparent;color:#0a2a4a;font-size:15px;font-weight:900;text-align:center;outline:none;cursor:default;margin-left:4px;"><button type="button" title="Eliminar fila" onclick="window.removeCaptureSemRow('+r1i+','+r2i+','+wi+','+ngr+')" style="margin-left:6px;font-size:11px;font-weight:bold;background:#c62828;color:#fff;border:none;border-radius:3px;padding:1px 5px;cursor:pointer;vertical-align:middle">×</button>';
       tr.appendChild(td1);
       /* Inputs por día */
       dayGroups.forEach(function(group, gi){
@@ -4510,7 +5439,7 @@ function _renderResumenImpl(){
 
           if(isFirstR2 && isFirstProg){
             pRow +=
-              '<td rowspan="'+r1Span+'" data-r1-rowspan="'+i1+'" style="font-size:15px;font-weight:bold;vertical-align:top;'+
+              '<td class="'+(pivotMode === 'producto' ? 'resumen-product-name' : 'resumen-store-name')+'" rowspan="'+r1Span+'" data-r1-rowspan="'+i1+'" style="font-size:15px;font-weight:bold;vertical-align:top;'+
               'white-space:nowrap;padding:5px 8px;border-right:1px solid #c8d2e8;'+
               'border-top:2px solid #b0bcd8;background:#eef2fa">'+
               '<span data-togbtn="'+id1+'" style="'+TOG_STYLE_SEM+'" onclick="toggleResumenLevel(\''+id1+'\')">−</span>'+r1Key+'</td>';
@@ -4518,7 +5447,7 @@ function _renderResumenImpl(){
 
           if(isFirstProg){
             pRow +=
-              '<td rowspan="'+r2RowCount+'" data-r2-rowspan="'+i1+'_'+r2i+'" data-group="'+id1+'" style="vertical-align:top;white-space:nowrap;padding:4px 6px;'+
+              '<td class="'+(pivotMode === 'tienda' ? 'resumen-product-name' : 'resumen-store-name')+'" rowspan="'+r2RowCount+'" data-r2-rowspan="'+i1+'_'+r2i+'" data-group="'+id1+'" style="vertical-align:top;white-space:nowrap;padding:4px 6px;'+
               'border-top:'+borderTop+';border-right:1px solid #d0d8ea;font-size:14px;color:#2980B9;font-weight:600;background:'+r2Bg+'">'+
               r2Key+'</td>';
           }
@@ -4556,7 +5485,7 @@ function _renderResumenImpl(){
 
           if(!hasProgRows && isVeryFirst){
             rowHTML +=
-              '<td rowspan="'+r1Span+'" data-r1-rowspan="'+i1+'" style="font-size:15px;font-weight:bold;vertical-align:top;'+
+              '<td class="'+(pivotMode === 'producto' ? 'resumen-product-name' : 'resumen-store-name')+'" rowspan="'+r1Span+'" data-r1-rowspan="'+i1+'" style="font-size:15px;font-weight:bold;vertical-align:top;'+
               'white-space:nowrap;padding:5px 8px;border-right:1px solid #c8d2e8;'+
               'border-top:2px solid #b0bcd8;background:#eef2fa">'+
               '<span data-togbtn="'+id1+'" style="'+TOG_STYLE_SEM+'" onclick="toggleResumenLevel(\''+id1+'\')">−</span>'+r1Key+'</td>';
@@ -4564,7 +5493,7 @@ function _renderResumenImpl(){
 
           if(!hasProgRows && isFirstDef && isFirstWeek){
             rowHTML +=
-              '<td rowspan="'+r2RowCount+'" data-r2-rowspan="'+i1+'_'+r2i+'" data-group="'+id1+'" style="vertical-align:top;white-space:nowrap;padding:4px 6px;'+
+              '<td class="'+(pivotMode === 'tienda' ? 'resumen-product-name' : 'resumen-store-name')+'" rowspan="'+r2RowCount+'" data-r2-rowspan="'+i1+'_'+r2i+'" data-group="'+id1+'" style="vertical-align:top;white-space:nowrap;padding:4px 6px;'+
               'border-top:'+borderTop+';border-right:1px solid #d0d8ea;font-size:14px;color:#2980B9;font-weight:600;background:'+r2Bg+';">'+
               r2Key+'</td>';
           }
@@ -4646,7 +5575,7 @@ function _renderResumenImpl(){
               /* Values cell: Capture SEM en todas las filas */
               capRow += '<td data-group="'+id1+'" style="position:static;background:'+capBg+';padding:3px 6px;white-space:nowrap;font-size:14px;font-weight:600;color:#1565c0;border-right:1px solid #e0e6f0;text-align:left;vertical-align:middle">';
               capRow += '<span style="font-size:12px;color:#1565c0">Capture SEM</span>';
-              capRow += '<div style="font-size:12px;font-weight:bold;color:#1a3a5c;margin-top:2px;background:#ddeeff;display:inline-block;border-radius:3px;padding:1px 6px"><input type="text" id="csem_'+i1+'_'+r2i+'_'+wi+'" placeholder="SEM" value="'+(window._nextSemanaProyeccion||'')+'" oninput="window.syncCaptureProjFromBlock('+i1+','+r2i+')" style="width:50px;border:2px solid #2980b9;border-radius:4px;padding:2px 4px;font-size:13px;text-align:center;background:#eef6fc;color:#0a2a4a;font-weight:bold;outline:none"></div>';
+              capRow += '<input type="text" id="csem_'+i1+'_'+r2i+'_'+wi+'" value="'+(window._nextSemanaProyeccion||'')+'" readonly style="width:30px;border:none;background:transparent;color:#0a2a4a;font-size:15px;font-weight:900;text-align:center;outline:none;cursor:default;margin-left:4px;">';
               capRow += '</td>';
               dayGroups.forEach(function(group, gi){
                 /* Siempre mostrar input, independientemente de si hay dato */
@@ -4939,7 +5868,7 @@ function _renderResumenImpl(){
     var td1 = document.createElement('td');
     td1.setAttribute('data-group', tr.getAttribute('data-group'));
     td1.style.cssText = 'background:'+bg+';padding:3px 6px;white-space:nowrap;font-size:14px;font-weight:600;color:#1565c0;border-right:1px solid #e0e6f0;text-align:left;vertical-align:middle';
-    td1.innerHTML = '<span style="font-size:12px;color:#1565c0">Capture SEM</span><div style="font-size:12px;font-weight:bold;color:#1a3a5c;margin-top:2px;background:#ddeeff;display:inline-block;border-radius:3px;padding:1px 6px"><input type="text" id="csem_'+r1i+'_'+r2i+'_'+rowi+'" placeholder="SEM" value="'+(window._nextSemanaProyeccion||'')+'" readonly style="width:50px;border:2px solid #2980b9;border-radius:4px;padding:2px 4px;font-size:13px;text-align:center;background:#eef6fc;color:#0a2a4a;font-weight:bold;outline:none;cursor:not-allowed;"></div><button type="button" title="Eliminar fila" onclick="window.removeCaptureNormalRow('+r1i+','+r2i+','+rowi+','+ncols+')" style="margin-left:3px;font-size:11px;font-weight:bold;background:#c62828;color:#fff;border:none;border-radius:3px;padding:1px 5px;cursor:pointer;vertical-align:middle">×</button>';
+    td1.innerHTML = '<span style="font-size:13px;font-weight:bold;color:#1565c0">Capture SEM</span><input type="text" id="csem_'+r1i+'_'+r2i+'_'+rowi+'" value="'+(window._nextSemanaProyeccion||'')+'" readonly style="width:30px;border:none;background:transparent;color:#0a2a4a;font-size:15px;font-weight:900;text-align:center;outline:none;cursor:default;margin-left:4px;"><button type="button" title="Eliminar fila" onclick="window.removeCaptureNormalRow('+r1i+','+r2i+','+rowi+','+ncols+')" style="margin-left:6px;font-size:11px;font-weight:bold;background:#c62828;color:#fff;border:none;border-radius:3px;padding:1px 5px;cursor:pointer;vertical-align:middle">×</button>';
     tr.appendChild(td1);
     for(var ci=0; ci<ncols; ci++){
       var td = document.createElement('td');
@@ -5222,7 +6151,7 @@ function _renderResumenImpl(){
           var capRow2 = '<tr data-group="'+id1+'" data-capture-initial="1" style="display:none;background:'+ncapBg+';border-top:1px dashed #64a8d8">';
           capRow2 += '<td data-group="'+id1+'" style="background:'+ncapBg+';padding:3px 6px;white-space:nowrap;font-size:14px;font-weight:600;color:#1565c0;border-right:1px solid #e0e6f0;text-align:left;vertical-align:middle">';
           capRow2 += '<span style="font-size:12px;color:#1565c0">Capture SEM</span>';
-          capRow2 += '<div style="font-size:12px;font-weight:bold;color:#1a3a5c;margin-top:3px;background:#ddeeff;display:inline-block;border-radius:3px;padding:1px 6px"><input type="text" id="csem_'+i1+'_'+r2i+'_0" placeholder="SEM" value="'+(window._nextSemanaProyeccion||'')+'" oninput="window.syncCaptureProjFromBlock('+i1+','+r2i+')" style="width:50px;border:2px solid #2980b9;border-radius:4px;padding:2px 4px;font-size:13px;text-align:center;background:#eef6fc;color:#0a2a4a;font-weight:bold;outline:none"></div>';
+          capRow2 += '<input type="text" id="csem_'+i1+'_'+r2i+'_0" value="'+(window._nextSemanaProyeccion||'')+'" readonly style="width:30px;border:none;background:transparent;color:#0a2a4a;font-size:15px;font-weight:900;text-align:center;outline:none;cursor:default;margin-left:4px;">';
           capRow2 += '</td>';
           pivot.columns.forEach(function(col, ci){
             var inputId2 = 'cin_'+i1+'_'+r2i+'_0_'+ci;
@@ -5764,8 +6693,6 @@ function imprimirReporte(){
   if(win){ win.addEventListener('load', function(){ URL.revokeObjectURL(url); }); }
 }
 
-window.addEventListener('load', init);
-
 (function fixParent(){
   try {
     var p = window.parent.document;
@@ -5838,8 +6765,10 @@ _resizeObs.observe(document.documentElement);
 _resizeObs.observe(document.body);
 window.addEventListener('load', function(){ resizeAfterChange(); });
 // Parchear toggleDrillT para que también dispare resize
-var _origToggleDrillT = toggleDrillT;
-toggleDrillT = function(id){ _origToggleDrillT(id); resizeAfterChange(); };
+if (typeof toggleDrillT !== 'undefined') {
+  var _origToggleDrillT = toggleDrillT;
+  toggleDrillT = function(id){ _origToggleDrillT(id); resizeAfterChange(); };
+}
 // ── Asistente IA ──
 window.aiChatHistory = window.aiChatHistory || [];
 
@@ -6051,7 +6980,7 @@ function removeTypingIndicator() {
   if(el) el.remove();
 }
 
-function sendChatMessage() {
+function sendChatMessageRemoteDisabled() {
   var input = document.getElementById('aiChatInput');
   if(!input) return;
   var msg = input.value.trim();
@@ -6139,6 +7068,118 @@ function sendChatMessage() {
 }
 
 
+function _localNorm(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+}
+
+function _localRecords() {
+  var src = DATA.resumen_diario || {};
+  var tiendas = getTiendasActivas();
+  var semanas = getSemanasActivas();
+  var productos = getProductosActivos();
+  var allowed = {};
+  productos.forEach(function(p){ allowed[p] = true; });
+  var rows = [];
+  tiendas.forEach(function(t) {
+    semanas.forEach(function(s) {
+      var byProduct = (src[t] || {})[s] || (src[t] || {})[String(s)] || {};
+      Object.keys(byProduct).forEach(function(p) {
+        if (productos.length && !allowed[p]) return;
+        var row = {tienda:t, producto:p, semana:s, embarque:0, ventas:0, merma:0};
+        Object.keys(byProduct[p] || {}).forEach(function(fecha) {
+          var d = byProduct[p][fecha] || {};
+          row.embarque += Number(d.embarque || 0);
+          row.ventas += Number(d.ventas || 0);
+          row.merma += Number(d.merma || 0);
+        });
+        rows.push(row);
+      });
+    });
+  });
+  return rows;
+}
+
+function _localAggregate(rows, dimension) {
+  var grouped = {};
+  rows.forEach(function(r) {
+    var key = dimension === 'tienda' ? r.tienda : r.producto;
+    if (!grouped[key]) grouped[key] = {nombre:key, embarque:0, ventas:0, merma:0};
+    grouped[key].embarque += r.embarque;
+    grouped[key].ventas += r.ventas;
+    grouped[key].merma += r.merma;
+  });
+  return Object.keys(grouped).map(function(k) {
+    var x = grouped[k];
+    x.sell_thru = x.embarque > 0 ? x.ventas / x.embarque * 100 : 0;
+    return x;
+  });
+}
+
+function _localFormat(value, percent) {
+  return percent ? Number(value || 0).toFixed(1) + '%' : Number(value || 0).toLocaleString('es-MX', {maximumFractionDigits:2});
+}
+
+function answerLocalQuery(message) {
+  var q = _localNorm(message);
+  var rows = _localRecords();
+  if (!rows.length) return 'No hay datos disponibles con los filtros actuales.';
+  if (/AYUDA|EJEMPLO|QUE PUEDES/.test(q)) return '**Ejemplos:**\n• ¿Qué tienda vendió más?\n• Producto con mayor embarque\n• Total de ventas o merma\n• Sell Thru de DIAZ ORDAZ\n• Productos con Sell Thru menor a 50%\n• Compara MIXTO 9T contra MIXTO 12T';
+
+  var metric = /SELL|THRU|DESPLAZAMIENTO/.test(q) ? 'sell_thru' : /EMBARQ/.test(q) ? 'embarque' : /MERMA/.test(q) ? 'merma' : 'ventas';
+  var labels = {ventas:'ventas POS',embarque:'embarque',merma:'merma',sell_thru:'Sell Thru'};
+  var dimension = /TIENDA|CLUB/.test(q) ? 'tienda' : 'producto';
+  var data = _localAggregate(rows, dimension);
+  var percent = metric === 'sell_thru';
+  var entities = data.filter(function(x) {
+    var full = _localNorm(x.nombre), shortName = full.replace(/^SC\s+|^BQT\s+/, '');
+    return q.indexOf(full) !== -1 || (shortName.length > 3 && q.indexOf(shortName) !== -1);
+  });
+
+  if (/COMPARA|CONTRA| VS /.test(q) && entities.length >= 2) return entities.slice(0,4).map(function(x){ return '**'+x.nombre.replace(/^SC |^BQT /,'')+':** '+_localFormat(x[metric],percent)+' de '+labels[metric]; }).join('\n');
+
+  var threshold = q.match(/(?:MENOR|MENOS|DEBAJO|INFERIOR).{0,18}?(\d+(?:\.\d+)?)\s*%/);
+  if (metric === 'sell_thru' && threshold) {
+    var limit = Number(threshold[1]);
+    var matches = data.filter(function(x){return x.sell_thru < limit;}).sort(function(a,b){return a.sell_thru-b.sell_thru;});
+    if (!matches.length) return 'No hay '+dimension+'s con Sell Thru menor a **'+limit+'%**.';
+    return '**'+matches.length+' '+dimension+'(s) debajo de '+limit+'%:**\n'+matches.slice(0,12).map(function(x){return '• '+x.nombre.replace(/^SC |^BQT /,'')+': **'+_localFormat(x.sell_thru,true)+'**';}).join('\n');
+  }
+
+  if (entities.length === 1) return '**'+entities[0].nombre.replace(/^SC |^BQT /,'')+'** tiene **'+_localFormat(entities[0][metric],percent)+'** de '+labels[metric]+' con los filtros actuales.';
+
+  if (/MAYOR|MAS|TOP|MAXIM/.test(q)) {
+    data.sort(function(a,b){return b[metric]-a[metric];});
+    return 'El '+dimension+' con mayor '+labels[metric]+' es **'+data[0].nombre.replace(/^SC |^BQT /,'')+'** con **'+_localFormat(data[0][metric],percent)+'**.';
+  }
+  if (/MENOR|MENOS|MINIM/.test(q)) {
+    var positives = data.filter(function(x){return x[metric] > 0;}).sort(function(a,b){return a[metric]-b[metric];});
+    if (!positives.length) return 'No hay valores positivos de '+labels[metric]+' con los filtros actuales.';
+    return 'El '+dimension+' con menor '+labels[metric]+' positivo es **'+positives[0].nombre.replace(/^SC |^BQT /,'')+'** con **'+_localFormat(positives[0][metric],percent)+'**.';
+  }
+  if (/TOTAL|CUANTO|CUANTA|SUMA/.test(q)) {
+    var emb=0, ven=0, mer=0;
+    rows.forEach(function(r){emb+=r.embarque;ven+=r.ventas;mer+=r.merma;});
+    var value = metric==='embarque'?emb:metric==='merma'?mer:metric==='sell_thru'?(emb?ven/emb*100:0):ven;
+    return 'El total de '+labels[metric]+' es **'+_localFormat(value,percent)+'** con los filtros actuales.';
+  }
+  return 'No reconocí esa consulta. Escribe **ayuda** para ver preguntas compatibles.';
+}
+
+// Reemplaza el chat remoto: esta última declaración es la versión activa.
+function sendChatMessage() {
+  var input = document.getElementById('aiChatInput');
+  if (!input) return;
+  var msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  addMessageToChat(msg, 'user');
+  try { addMessageToChat(answerLocalQuery(msg), 'ai'); }
+  catch (error) {
+    console.error('Error en consultor local', error);
+    addMessageToChat('No pude procesar la consulta. Revisa los filtros o escribe **ayuda**.', 'ai');
+  }
+}
+
 function openImageViewer(src) {
     document.getElementById('imgViewerImg').src = src;
     document.getElementById('imgViewerOverlay').style.display = 'block';
@@ -6149,46 +7190,32 @@ function closeImageViewer() {
     document.getElementById('imgViewerModal').style.display = 'none';
 }
 
-// Expose all nested local functions to window so they are globally accessible from HTML onclick attributes
+window.initWalmexJS = function(dashboardData, supabaseData, devolucionesData, supaUrl, supaKey) {
+    DATA = dashboardData;
+    SUPABASE_DATA = supabaseData;
+    DEVOLUCIONES_DATA = devolucionesData;
+    SUPABASE_URL = supaUrl;
+    SUPABASE_KEY = supaKey;
+    
+    var loader = document.getElementById('loader');
+    var loaderTxt = loader ? loader.querySelector('.ld-txt') : null;
+    
+    var startApp = function() {
+        try {
+            if (typeof window.init === 'function') {
+                window.init();
+            }
+        } catch (e) {
+            if (loaderTxt) {
+                loaderTxt.innerHTML = 'Error JS en init(): ' + e.message;
+            }
+            return;
+        }
 
-/* Ocultar sticky clone al cambiar de vista */
-var _origSetView = setView;
-window.setView = function(v) {
-  var clone = document.getElementById('_resumenStickyClone');
-  if (clone && v !== 'resumen') {
-    clone.style.visibility = 'hidden';
-    clone.style.pointerEvents = 'none';
-  }
-  _origSetView(v);
-};
+        if (loader) loader.style.display = 'none';
+        var app = document.getElementById('app');
+        if (app) app.style.display = 'block';
+    };
 
-window.renderResumen = renderResumen;
-window.setupResumenStickyHeader = setupResumenStickyHeader;
-window._renderResumenImpl = _renderResumenImpl;
-window.setResumenPivot = setResumenPivot;
-window.addCaptureRowAll = addCaptureRowAll;
-window.removeCaptureRowAll = removeCaptureRowAll;
-window.saveAllCaptureRows = saveAllCaptureRows;
-window._showDeleteWeekDialog = _showDeleteWeekDialog;
-window.exportCaptureData = exportCaptureData;
-window.openImageViewer = openImageViewer;
-window.closeImageViewer = closeImageViewer;
-window.toggleSemDrop = toggleSemDrop;
-window.closeSemDrop = closeSemDrop;
-window.toggleTiendaDrop = toggleTiendaDrop;
-window.closeTiendaDrop = closeTiendaDrop;
-window.toggleProductoDrop = toggleProductoDrop;
-window.closeProductoDrop = closeProductoDrop;
-window.onCiudadChange = onCiudadChange;
-window.toggleTodasSemanas = toggleTodasSemanas;
-window.onSemChk = onSemChk;
-window.toggleTodasTiendas = toggleTodasTiendas;
-window.onTiendaChk = onTiendaChk;
-window.toggleTodosProductos = toggleTodosProductos;
-window.onProductoChk = onProductoChk;
-window.imprimirReporte = imprimirReporte;
-window.recargarDatos = recargarDatos;
-window.toggleChoferesMenu = toggleChoferesMenu;
-window.openChoferesSubTab = openChoferesSubTab;
-
+    Promise.resolve(window.loadUIStateFromSupabase()).then(startApp, startApp);
 };
