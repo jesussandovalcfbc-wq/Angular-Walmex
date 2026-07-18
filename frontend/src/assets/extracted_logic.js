@@ -243,6 +243,8 @@ function openChoferesSubTab(tab) {
     }
 }
 
+
+
 function renderDevoluciones() {
     var tbody = document.getElementById('devolucionesTbody');
     if (!tbody) return;
@@ -284,7 +286,7 @@ function renderDevoluciones() {
     el = document.getElementById('devTotalUnidades'); if(el) el.textContent = totalUnid.toLocaleString('en-US');
     el = document.getElementById('devTotalMonto');   if(el) el.textContent = '$'+totalMonto.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
-var state = { semana: null, semanas_sel: null, tienda: null, tiendas_sel: null, producto: null, productos_sel: null, view: 'producto', tiendaT: null, invMode: null, invSelected: null, compMode: 'semanas', drillSem: null, drillTienda: null, resumenMode: 'semanas', resumenPivot: 'tienda', reabastoWindow: 3 };
+var state = { semana: null, semanas_sel: null, tienda: null, tiendas_sel: null, producto: null, productos_sel: null, view: 'producto', tiendaT: null, invMode: null, invSelected: null, invSubTab: 'inventario', compMode: 'semanas', drillSem: null, drillTienda: null, resumenMode: 'semanas', resumenPivot: 'tienda', reabastoWindow: 3 };
 var DIAS  = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
 var MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 
@@ -1552,6 +1554,7 @@ function renderInventario(){
   document.getElementById('viewInventario').style.display = 'grid';
 
   var det = DATA.detalle_inventario;
+  
   if(!det || !det.fechas || det.fechas.length === 0){
     document.getElementById('tInvTiendaHead').innerHTML = '<tr><th colspan="2">Sin datos en hoja Detalle</th></tr>';
     document.getElementById('tInvTienda').innerHTML = '';
@@ -3846,7 +3849,74 @@ function _resumenAnalysisTrendStatus(weekValues, weeks){
   return {key:'stable', label:'Sin movimiento'};
 }
 
-function _collectResumenPosAnalysis(){
+function _resumenAnalysisMetricLabel(metricKey){
+  if(metricKey === 'programado') return 'Programado';
+  if(metricKey === 'embarque') return 'Embarcado';
+  return 'POS';
+}
+
+function _resumenAnalysisWeekParts(value){
+  var digits = String(value || '').replace(/\D/g,'');
+  var year = new Date().getFullYear();
+  var week = 0;
+  if(digits.length >= 6){
+    year = parseInt(digits.slice(0,4),10) || year;
+    week = parseInt(digits.slice(-2),10) || 0;
+  } else if(digits.length === 4){
+    year = 2000 + (parseInt(digits.slice(0,2),10) || (year % 100));
+    week = parseInt(digits.slice(2),10) || 0;
+  } else {
+    week = parseInt(digits,10) || 0;
+  }
+  return {year:year, week:week};
+}
+
+function _resumenAnalysisIsoDate(weekValue, dayIndex){
+  var parts = _resumenAnalysisWeekParts(weekValue);
+  var jan4 = new Date(parts.year, 0, 4);
+  var jan4Day = jan4.getDay() || 7;
+  var monday = new Date(parts.year, 0, 4 - jan4Day + 1 + ((parts.week - 1) * 7));
+  monday.setDate(monday.getDate() + Math.max(0, Math.min(6, (parseInt(dayIndex,10) || 1) - 1)));
+  return monday.getFullYear()+'/'+String(monday.getMonth()+1).padStart(2,'0')+'/'+String(monday.getDate()).padStart(2,'0');
+}
+
+function _resumenAnalysisProgramadoSource(weeks, tiendas, productos){
+  var root = {};
+  var captureStore = (window._captureProjections && window._captureProjections.sem) || {};
+  var weekByNumber = {};
+  weeks.forEach(function(week){
+    var parts = _resumenAnalysisWeekParts(week);
+    if(parts.week) weekByNumber[parts.week] = week;
+  });
+  tiendas.forEach(function(store){
+    productos.forEach(function(product){
+      var entry = captureStore[_captureProjStoreKey(product, store)];
+      ((entry && entry.rows) || []).forEach(function(row){
+        if(!row || !row.saved) return;
+        var weekKey = weekByNumber[_resumenAnalysisWeekParts(row.sem).week];
+        if(!weekKey) return;
+        (row.values || []).forEach(function(rawValue,index){
+          var value = Number(rawValue) || 0;
+          if(!value) return;
+          var dateKey = _resumenAnalysisIsoDate(weekKey, index + 1);
+          if(!root[store]) root[store] = {};
+          if(!root[store][weekKey]) root[store][weekKey] = {};
+          if(!root[store][weekKey][product]) root[store][weekKey][product] = {};
+          if(!root[store][weekKey][product][dateKey]) root[store][weekKey][product][dateKey] = {programado:0};
+          root[store][weekKey][product][dateKey].programado += value;
+        });
+      });
+    });
+  });
+  return root;
+}
+
+function _resumenAnalysisMetricValue(record, metricKey){
+  return Number((record || {})[metricKey]) || 0;
+}
+
+function _collectResumenPosAnalysis(metricKey){
+  metricKey = metricKey === 'programado' || metricKey === 'embarque' ? metricKey : 'ventas';
   var weeks = getSemanasActivas().map(function(s){ return String(s); }).sort(function(a,b){
     return (parseInt(a,10)||0) - (parseInt(b,10)||0);
   });
@@ -3863,7 +3933,9 @@ function _collectResumenPosAnalysis(){
   var byPair = {};
   weeks.forEach(function(w){ totals[w] = 0; });
 
-  var srcRoot = (typeof DATA !== 'undefined' && DATA.resumen_diario) || {};
+  var srcRoot = metricKey === 'programado'
+    ? _resumenAnalysisProgramadoSource(weeks, tiendas, productos)
+    : ((typeof DATA !== 'undefined' && DATA.resumen_diario) || {});
   tiendas.forEach(function(store){
     var storeSrc = srcRoot[store] || {};
     weeks.forEach(function(week){
@@ -3871,7 +3943,7 @@ function _collectResumenPosAnalysis(){
       Object.keys(weekSrc).forEach(function(product){
         if(!productoSet[product]) return;
         Object.keys(weekSrc[product] || {}).forEach(function(date){
-          var value = Number(((weekSrc[product][date] || {}).ventas)) || 0;
+          var value = _resumenAnalysisMetricValue(weekSrc[product][date], metricKey);
           totals[week] += value;
           if(!byStore[store]) byStore[store] = {};
           if(!byProduct[product]) byProduct[product] = {};
@@ -3885,7 +3957,7 @@ function _collectResumenPosAnalysis(){
     });
   });
 
-  return {weeks:weeks, totals:totals, byStore:byStore, byProduct:byProduct, byPair:byPair};
+  return {weeks:weeks, totals:totals, byStore:byStore, byProduct:byProduct, byPair:byPair, metricKey:metricKey, metricLabel:_resumenAnalysisMetricLabel(metricKey)};
 }
 
 function _resumenAnalysisDayInfo(value){
@@ -3898,9 +3970,10 @@ function _resumenAnalysisDayInfo(value){
   return {index:index, label:labels[index], date:value};
 }
 
-function _collectResumenPosAnalysisView(mode){
+function _collectResumenPosAnalysisView(mode, metricKey){
   mode = mode === 'day' ? 'day' : 'week';
-  var weekly = _collectResumenPosAnalysis();
+  metricKey = metricKey === 'programado' || metricKey === 'embarque' ? metricKey : 'ventas';
+  var weekly = _collectResumenPosAnalysis(metricKey);
   var selectedWeeks = weekly.weeks;
   var periodLabels = {};
   var comparisonPairs = [];
@@ -3928,7 +4001,9 @@ function _collectResumenPosAnalysisView(mode){
   var productos = getProductosActivos();
   var productoSet = {};
   productos.forEach(function(product){ productoSet[product] = true; });
-  var srcRoot = (typeof DATA !== 'undefined' && DATA.resumen_diario) || {};
+  var srcRoot = metricKey === 'programado'
+    ? _resumenAnalysisProgramadoSource(selectedWeeks, tiendas, productos)
+    : ((typeof DATA !== 'undefined' && DATA.resumen_diario) || {});
   var latestWeek = selectedWeeks[selectedWeeks.length - 1];
   var cutoffDay = 0;
 
@@ -3939,7 +4014,7 @@ function _collectResumenPosAnalysisView(mode){
       Object.keys(weekSrc[product] || {}).forEach(function(dateKey){
         var info = _resumenAnalysisDayInfo(dateKey);
         var metric = (weekSrc[product] || {})[dateKey] || {};
-        if(info && Number(metric.ventas) > 0 && info.index > cutoffDay) cutoffDay = info.index;
+        if(info && _resumenAnalysisMetricValue(metric, metricKey) > 0 && info.index > cutoffDay) cutoffDay = info.index;
       });
     });
   });
@@ -3988,7 +4063,7 @@ function _collectResumenPosAnalysisView(mode){
           var info = _resumenAnalysisDayInfo(dateKey);
           if(!info || selectedDays.indexOf(info.index) < 0) return;
           var metric = (weekSrc[product] || {})[dateKey] || {};
-          var value = Number(metric.ventas) || 0;
+          var value = _resumenAnalysisMetricValue(metric, metricKey);
           var period = week;
           add(byStore, store, period, value);
           add(byProduct, product, period, value);
@@ -4026,6 +4101,8 @@ function _collectResumenPosAnalysisView(mode){
     cutoffDay:cutoffDay,
     selectedDays:selectedDays,
     latestWeek:latestWeek,
+    metricKey:metricKey,
+    metricLabel:_resumenAnalysisMetricLabel(metricKey),
     note:'Comparando '+selectedDays.map(function(day){ return fullDayNames[day]; }).join(', ')+' entre semanas seleccionadas'+
       (selectedDays.some(function(day){ return day > cutoffDay; }) ? ' · la semana '+resumenSemLabel(latestWeek)+' aún no tiene datos de todos los días elegidos' : '')
   };
@@ -4308,6 +4385,7 @@ function _resumenAnalysisDragToken(mode){
   var token = String(mode || '');
   if(/^day:[1-7]$/.test(token)) return token;
   if(token === 'product') return token;
+  if(token === 'programado' || token === 'embarque') return token;
   return 'week';
 }
 
@@ -4340,7 +4418,10 @@ function resumenAnalysisPeriodMouseStart(event, mode){
   _resumenAnalysisPeriodDragGhost.className = 'analysis-period-drag-ghost';
   var dayNames = ['','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
   var draggedDay = _resumenAnalysisPeriodDragMode.indexOf('day:') === 0 ? parseInt(_resumenAnalysisPeriodDragMode.split(':')[1],10) : 0;
-  _resumenAnalysisPeriodDragGhost.textContent = draggedDay ? dayNames[draggedDay] : (_resumenAnalysisPeriodDragMode === 'product' ? 'Product' : 'Week');
+  _resumenAnalysisPeriodDragGhost.textContent = draggedDay ? dayNames[draggedDay] :
+    (_resumenAnalysisPeriodDragMode === 'product' ? 'Product' :
+      (_resumenAnalysisPeriodDragMode === 'programado' ? 'Programado' :
+        (_resumenAnalysisPeriodDragMode === 'embarque' ? 'Embarcado' : 'Week')));
   document.body.appendChild(_resumenAnalysisPeriodDragGhost);
   document.body.classList.add('analysis-period-is-dragging');
   _moveResumenAnalysisPeriodGhost(event);
@@ -4402,6 +4483,11 @@ function resumenAnalysisPeriodDrop(event){
     state.resumenAnalysisProductField = true;
     state.resumenExpandedStores = {};
     getTiendasActivas().forEach(function(store){ state.resumenExpandedStores[store] = true; });
+  } else if(mode === 'programado' || mode === 'embarque'){
+    var selectedMetrics = Array.isArray(state.resumenAnalysisMetrics) ? state.resumenAnalysisMetrics.slice() : [];
+    if(selectedMetrics.indexOf(mode) < 0) selectedMetrics.push(mode);
+    state.resumenAnalysisMetrics = selectedMetrics;
+    state.resumenAnalysisMetric = mode;
   } else if(dayMatch){
     var droppedDay = parseInt(dayMatch[1],10);
     var selectedDays = state.resumenAnalysisPeriodMode === 'day' && Array.isArray(state.resumenAnalysisSelectedDays)
@@ -4435,6 +4521,17 @@ function removeResumenAnalysisProductField(event){
   if(event){ event.preventDefault(); event.stopPropagation(); }
   state.resumenAnalysisProductField = false;
   state.resumenExpandedStores = {};
+  state.resumenAnalysisColumnOrders = {};
+  renderResumenAnalysis();
+}
+
+function removeResumenAnalysisMetricField(metricKey, event){
+  if(event){ event.preventDefault(); event.stopPropagation(); }
+  var selectedMetrics = Array.isArray(state.resumenAnalysisMetrics) ? state.resumenAnalysisMetrics.slice() : [];
+  state.resumenAnalysisMetrics = selectedMetrics.filter(function(metric){ return metric !== metricKey; });
+  state.resumenAnalysisMetric = state.resumenAnalysisMetrics.length
+    ? state.resumenAnalysisMetrics[state.resumenAnalysisMetrics.length - 1]
+    : 'ventas';
   state.resumenAnalysisColumnOrders = {};
   renderResumenAnalysis();
 }
@@ -4474,7 +4571,19 @@ function renderResumenAnalysis(){
   if(!state.resumenAnalisisOpen) return;
 
   if(!state.resumenAnalysisPeriodMode) state.resumenAnalysisPeriodMode = 'week';
-  var analysis = _collectResumenPosAnalysisView(state.resumenAnalysisPeriodMode);
+  var selectedMetrics = Array.isArray(state.resumenAnalysisMetrics)
+    ? state.resumenAnalysisMetrics.filter(function(metric){ return metric === 'programado' || metric === 'embarque'; })
+    : [];
+  if(!selectedMetrics.length && (state.resumenAnalysisMetric === 'programado' || state.resumenAnalysisMetric === 'embarque')){
+    selectedMetrics = [state.resumenAnalysisMetric];
+  }
+  selectedMetrics = selectedMetrics.filter(function(metric,index){ return selectedMetrics.indexOf(metric) === index; });
+  state.resumenAnalysisMetrics = selectedMetrics;
+  var analysisMetricKeys = selectedMetrics.length ? selectedMetrics.slice() : ['ventas'];
+  var analyses = analysisMetricKeys.map(function(metric){
+    return _collectResumenPosAnalysisView(state.resumenAnalysisPeriodMode, metric);
+  });
+  var analysis = analyses[0];
   var selectedWeeks = analysis.weeks;
   var weeks = analysis.periods;
   var layout = document.querySelector('#viewResumen .resumen-layout');
@@ -4503,7 +4612,7 @@ function renderResumenAnalysis(){
   window._resumenAnalysisStoreProductKeys = {};
 
   function managementTable(title, itemLabel, rows){
-    var isStoreTable = title === 'Tiendas' || title === 'Stores';
+    var isStoreTable = title === 'Tiendas' || title === 'Stores' || title.indexOf('Stores ·') === 0;
     var gridKey = isStoreTable ? 'tienda' : 'producto';
     var differenceHeaders = analysis.comparisonPairs.map(function(pair){
       return {field:'diff-'+pair.from+'-'+pair.to, label:pair.label};
@@ -4825,7 +4934,11 @@ function renderResumenAnalysis(){
     var productActiveField = state.resumenAnalysisProductField
       ? '<button class="analysis-period-active-field analysis-period-active-product" onclick="removeResumenAnalysisProductField(event)" title="Remove Product" type="button"><span>Product</span><b aria-hidden="true">×</b></button>'
       : '';
-    var activeFieldsHtml = productActiveField+periodFieldsHtml;
+    var metricActiveFields = state.resumenAnalysisMetrics.map(function(metric){
+      var metricLabel = _resumenAnalysisMetricLabel(metric);
+      return '<button class="analysis-period-active-field analysis-period-active-metric" onclick="removeResumenAnalysisMetricField(\''+metric+'\',event)" title="Quitar '+metricLabel+'" type="button"><span>'+metricLabel+'</span><b aria-hidden="true">×</b></button>';
+    }).join('');
+    var activeFieldsHtml = productActiveField+metricActiveFields+periodFieldsHtml;
     var periodDropzone = '<span class="analysis-period-dropzone" onmouseenter="resumenAnalysisPeriodMouseEnter(event)" onmouseleave="resumenAnalysisPeriodMouseLeave(event)" onmouseup="resumenAnalysisPeriodDrop(event)" ondragover="resumenAnalysisPeriodDragOver(event)" ondragleave="resumenAnalysisPeriodDragLeave(event)" ondrop="resumenAnalysisPeriodDrop(event)">'+
       activeFieldsHtml+'<small>Arrastra campos aquí</small></span>';
     return '<section class="analysis-management-section" style="width:min('+gridWidth+'px,100%)"><h3><span class="analysis-section-title">'+title+'</span>'+periodDropzone+'</h3>'+
@@ -4834,16 +4947,125 @@ function renderResumenAnalysis(){
       '</tbody>'+totalRow+'</table></div></section>';
   }
 
+  function multiMetricManagementTable(){
+    var baseAnalysis = analyses[0];
+    var metricWeeks = baseAnalysis.periods;
+    var isDayMode = baseAnalysis.mode === 'day';
+    var showProduct = !!state.resumenAnalysisProductField;
+    var hierarchyHeaders = [{field:'name', label:'Store'}];
+    if(showProduct) hierarchyHeaders.push({field:'product', label:'Product'});
+    hierarchyHeaders.push({field:'metric', label:'Value'});
+    if(isDayMode) hierarchyHeaders.push({field:'day', label:'Day'});
+    var differenceHeaders = baseAnalysis.comparisonPairs.map(function(pair){
+      return {field:'diff-'+pair.from+'-'+pair.to, label:pair.label};
+    });
+    var headers = hierarchyHeaders
+      .concat(metricWeeks.map(function(week){ return {field:'week-'+week, label:baseAnalysis.periodLabels[week] || resumenSemLabel(week)}; }))
+      .concat(differenceHeaders)
+      .concat([{field:'difference',label:'Dif. total'},{field:'variation',label:'Var. total'},{field:'status',label:'Estado'}]);
+    var columnCount = headers.length;
+    var gridWidth = Math.max(820, 640+(metricWeeks.length*72)+(differenceHeaders.length*90)+((hierarchyHeaders.length-1)*105));
+    var headerHtml = headers.map(function(header){
+      return '<th class="analysis-field-header" data-field="'+header.field+'" onmousedown="resumenPivotDragStart(event)" onmouseenter="resumenPivotDragOver(event)" onmouseleave="resumenPivotDragLeave(event)" onmouseup="resumenPivotDrop(event)" title="Arrastra para mover esta columna"><span>'+header.label+'</span><span class="analysis-field-grip" aria-hidden="true"></span></th>';
+    }).join('');
+    function metricCells(metricAnalysis, values){
+      var programadoStyle = metricAnalysis.metricKey === 'programado' ? ' style="background:#fff4c7!important;border-color:#e2c96d!important"' : '';
+      var synthetic = {value:values || {}};
+      var row = _resumenAnalysisRows(synthetic, metricWeeks, metricAnalysis.baselineKeys, metricAnalysis.currentKeys, !isDayMode)[0];
+      var pctText = row.pct === null ? (row.current > 0 ? 'Nuevo' : '—') : ((row.pct > 0 ? '+' : '')+row.pct.toFixed(1)+'%');
+      var weekCells = metricWeeks.map(function(week){ return '<td data-field="week-'+week+'"'+programadoStyle+'>'+_resumenAnalysisNumber(row.weekValues[week])+'</td>'; }).join('');
+      var differenceCells = metricAnalysis.comparisonPairs.map(function(pair){
+        var value = (row.weekValues[pair.to] || 0)-(row.weekValues[pair.from] || 0);
+        var valueClass = value > 0 ? 'up' : value < 0 ? 'down' : 'stable';
+        return '<td data-field="diff-'+pair.from+'-'+pair.to+'" class="analysis-change '+valueClass+'"'+programadoStyle+'><strong>'+_resumenAnalysisDelta(value)+'</strong></td>';
+      }).join('');
+      return weekCells+differenceCells+
+        '<td data-field="difference" class="analysis-change '+row.status.key+'"'+programadoStyle+'><strong>'+_resumenAnalysisDelta(row.delta)+'</strong></td>'+
+        '<td data-field="variation" class="analysis-percent '+row.status.key+'"'+programadoStyle+'>'+pctText+'</td>'+
+        '<td data-field="status"'+programadoStyle+'><span class="analysis-status '+row.status.key+'">'+row.status.label+'</span></td>';
+    }
+    var storeMap = {};
+    analyses.forEach(function(metricAnalysis){ Object.keys(metricAnalysis.byStore || {}).forEach(function(store){ storeMap[store] = true; }); });
+    var storeNames = Object.keys(storeMap).sort();
+    var dayNames = ['','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    var days = isDayMode ? baseAnalysis.selectedDays.slice() : [0];
+    var body = '';
+    storeNames.forEach(function(store){
+      var productMap = {};
+      if(showProduct){
+        analyses.forEach(function(metricAnalysis){ Object.keys((metricAnalysis.byPair[store] || {})).forEach(function(product){ productMap[product] = true; }); });
+      }
+      var products = showProduct ? Object.keys(productMap).sort() : [''];
+      if(!products.length) return;
+      var storeRowspan = products.length*analyses.length*days.length;
+      var firstStoreRow = true;
+      products.forEach(function(product){
+        var productRowspan = analyses.length*days.length;
+        var firstProductRow = true;
+        analyses.forEach(function(metricAnalysis){
+          var firstMetricRow = true;
+          days.forEach(function(day){
+            var values;
+            if(isDayMode && showProduct) values = (((metricAnalysis.byPairDay[store] || {})[product] || {})[day]) || {};
+            else if(isDayMode) values = ((metricAnalysis.byStoreDay[store] || {})[day]) || {};
+            else if(showProduct) values = (metricAnalysis.byPair[store] || {})[product] || {};
+            else values = metricAnalysis.byStore[store] || {};
+            body += '<tr class="analysis-pivot-day-row analysis-metric-tree-row'+(metricAnalysis.metricKey === 'programado' ? ' analysis-programado-row' : '')+'">'+
+              (firstStoreRow ? '<td data-field="name" rowspan="'+storeRowspan+'" class="analysis-pivot-store-cell expanded"><span class="analysis-expander" aria-hidden="true">&#9662;</span>'+_resumenAnalysisEscape(store)+'</td>' : '')+
+              (showProduct && firstProductRow ? '<td data-field="product" rowspan="'+productRowspan+'" class="analysis-pivot-product-cell">'+_resumenAnalysisEscape(product.replace(/^BQT\s+/i,''))+'</td>' : '')+
+              (firstMetricRow ? '<td data-field="metric" rowspan="'+days.length+'" class="analysis-pivot-level-total"'+(metricAnalysis.metricKey === 'programado' ? ' style="background:#fff4c7!important;border-color:#e2c96d!important"' : '')+'>'+metricAnalysis.metricLabel+'</td>' : '')+
+              (isDayMode ? '<td data-field="day"'+(metricAnalysis.metricKey === 'programado' ? ' style="background:#fff4c7!important;border-color:#e2c96d!important"' : '')+'>'+dayNames[day]+'</td>' : '')+
+              metricCells(metricAnalysis, values)+'</tr>';
+            firstStoreRow = false;
+            firstProductRow = false;
+            firstMetricRow = false;
+          });
+        });
+      });
+    });
+    var totalRows = analyses.map(function(metricAnalysis){
+      var totals = {};
+      var totalProgramadoStyle = metricAnalysis.metricKey === 'programado' ? ' style="background:#fff4c7!important;border-color:#e2c96d!important"' : '';
+      metricWeeks.forEach(function(week){
+        totals[week] = Object.keys(metricAnalysis.byStore || {}).reduce(function(sum,store){ return sum+Number((metricAnalysis.byStore[store] || {})[week] || 0); },0);
+      });
+      return '<tr class="analysis-total-row'+(metricAnalysis.metricKey === 'programado' ? ' analysis-programado-row' : '')+'"><td data-field="name" colspan="'+(hierarchyHeaders.length-1)+'"'+totalProgramadoStyle+'>Total</td><td data-field="metric"'+totalProgramadoStyle+'>'+metricAnalysis.metricLabel+'</td>'+metricCells(metricAnalysis, totals)+'</tr>';
+    }).join('');
+    var activeDayNames = ['','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    var periodFieldsHtml = isDayMode
+      ? baseAnalysis.selectedDays.map(function(day){ return '<button class="analysis-period-active-field analysis-period-active-day" onclick="removeResumenAnalysisDay('+day+',event)" title="Quitar '+activeDayNames[day]+'" type="button"><span>'+activeDayNames[day]+'</span><b aria-hidden="true">×</b></button>'; }).join('')
+      : '<span class="analysis-period-active-field">Week</span>';
+    var productActiveField = showProduct ? '<button class="analysis-period-active-field analysis-period-active-product" onclick="removeResumenAnalysisProductField(event)" title="Remove Product" type="button"><span>Product</span><b aria-hidden="true">×</b></button>' : '';
+    var metricActiveFields = state.resumenAnalysisMetrics.map(function(metric){
+      var label = _resumenAnalysisMetricLabel(metric);
+      return '<button class="analysis-period-active-field analysis-period-active-metric" onclick="removeResumenAnalysisMetricField(\''+metric+'\',event)" title="Quitar '+label+'" type="button"><span>'+label+'</span><b aria-hidden="true">×</b></button>';
+    }).join('');
+    var dropzone = '<span class="analysis-period-dropzone" onmouseenter="resumenAnalysisPeriodMouseEnter(event)" onmouseleave="resumenAnalysisPeriodMouseLeave(event)" onmouseup="resumenAnalysisPeriodDrop(event)" ondragover="resumenAnalysisPeriodDragOver(event)" ondragleave="resumenAnalysisPeriodDragLeave(event)" ondrop="resumenAnalysisPeriodDrop(event)">'+productActiveField+metricActiveFields+periodFieldsHtml+'<small>Arrastra campos aquí</small></span>';
+    return '<section class="analysis-management-section" style="width:min('+gridWidth+'px,100%)"><h3><span class="analysis-section-title">Stores</span>'+dropzone+'</h3><div class="analysis-table-wrap"><table class="analysis-table" data-analysis-grid="tienda" style="min-width:'+gridWidth+'px"><thead><tr>'+headerHtml+'</tr></thead><tbody>'+(body || '<tr><td colspan="'+columnCount+'" class="analysis-no-rows">No hay datos para comparar.</td></tr>')+'</tbody><tfoot>'+totalRows+'</tfoot></table></div></section>';
+  }
+
   var fieldIcons = '<span class="analysis-period-field-icons" aria-hidden="true"><i class="analysis-period-arrow"></i><i class="analysis-period-filter"></i></span>';
   var weekField = '<button class="analysis-period-field'+(analysis.mode === 'week' ? ' active' : '')+'" onmousedown="resumenAnalysisPeriodMouseStart(event,\'week\')" onclick="event.preventDefault()" title="Arrastra al encabezado de la tabla" type="button"><span>Week</span>'+fieldIcons+'</button>';
   var productField = '<button class="analysis-period-field analysis-period-product-field'+(state.resumenAnalysisProductField ? ' active' : '')+'" onmousedown="resumenAnalysisPeriodMouseStart(event,\'product\')" onclick="event.preventDefault()" title="Drag Product into the table header" type="button"><span>Product</span>'+fieldIcons+'</button>';
+  var programadoField = '<button class="analysis-period-field analysis-period-metric-field'+(state.resumenAnalysisMetrics.indexOf('programado') >= 0 ? ' active' : '')+'" onmousedown="resumenAnalysisPeriodMouseStart(event,\'programado\')" onclick="event.preventDefault()" title="Arrastra Programado al encabezado" type="button"><span>Programado</span>'+fieldIcons+'</button>';
+  var embarcadoField = '<button class="analysis-period-field analysis-period-metric-field'+(state.resumenAnalysisMetrics.indexOf('embarque') >= 0 ? ' active' : '')+'" onmousedown="resumenAnalysisPeriodMouseStart(event,\'embarque\')" onclick="event.preventDefault()" title="Arrastra Embarcado al encabezado" type="button"><span>Embarcado</span>'+fieldIcons+'</button>';
   var dayFields = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(function(label,index){
     var day = index + 1;
     var isActive = analysis.mode === 'day' && analysis.selectedDays.indexOf(day) >= 0;
     return '<button class="analysis-period-field analysis-period-day-field'+(isActive ? ' active' : '')+'" onmousedown="resumenAnalysisPeriodMouseStart(event,\'day:'+day+'\')" onclick="event.preventDefault()" title="Arrastra '+label+' al encabezado" type="button"><span>'+label+'</span>'+fieldIcons+'</button>';
   }).join('');
-  var toolbar = '<div class="analysis-period-toolbar">'+weekField+productField+dayFields+'</div>';
-  host.innerHTML = toolbar+managementTable('Stores', 'Store', storeRows);
+  var toolbar = '<div class="analysis-period-toolbar">'+weekField+productField+programadoField+embarcadoField+dayFields+'</div>';
+  var tablesHtml = analyses.length > 1 ? multiMetricManagementTable() : analyses.map(function(metricAnalysis){
+    analysis = metricAnalysis;
+    weeks = analysis.periods;
+    storeRows = _resumenAnalysisRows(analysis.byStore, weeks, analysis.baselineKeys, analysis.currentKeys, analysis.mode !== 'day').filter(function(row){
+      return weeks.some(function(week){ return row.weekValues[week] !== 0; });
+    });
+    window._resumenAnalysisStoreKeys = storeRows.map(function(row){ return row.key; });
+    var tableTitle = analyses.length > 1 ? 'Stores · '+analysis.metricLabel : 'Stores';
+    return managementTable(tableTitle, 'Store', storeRows);
+  }).join('');
+  host.innerHTML = toolbar+tablesHtml;
   _restoreResumenAnalysisColumnOrders();
 }
 

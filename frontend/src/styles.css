@@ -1152,6 +1152,12 @@
     border-right:1px solid #c4d9f6 !important;
     border-bottom:1px solid #c4d9f6 !important;
   }
+  body.resumen-analysis-standalone .analysis-table tr.analysis-programado-row > td:not(.analysis-pivot-store-cell):not(.analysis-pivot-product-cell),
+  .analysis-table tr.analysis-programado-row > td:not(.analysis-pivot-store-cell):not(.analysis-pivot-product-cell) {
+    background:#fff4c7 !important;
+    border-right-color:#e2c96d !important;
+    border-bottom-color:#e2c96d !important;
+  }
   body.resumen-analysis-standalone .analysis-table tr.analysis-pivot-product-total > td {
     background:linear-gradient(to bottom,#edf3fb 0,#e4eefa 20px,#e4eefa 100%) !important;
     border-right:1px solid #abbacf !important;
