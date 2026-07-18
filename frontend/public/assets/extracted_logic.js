@@ -2512,6 +2512,10 @@ function _getSavedProgramadoRows(r1Key, r2Key) {
   /* Filtrar solo filas con datos y que estén marcadas como guardadas */
   return entry.rows.filter(function(r){
     return r.saved && (r.sem || (r.values||[]).some(function(v){ return v !== '' && parseFloat(v) > 0; }));
+  }).sort(function(a, b){
+    var semA = parseInt(String(a.sem).trim(), 10) || 0;
+    var semB = parseInt(String(b.sem).trim(), 10) || 0;
+    return semA - semB;
   });
 }
 
