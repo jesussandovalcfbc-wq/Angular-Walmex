@@ -243,6 +243,8 @@ function openChoferesSubTab(tab) {
     }
 }
 
+
+
 function renderDevoluciones() {
     var tbody = document.getElementById('devolucionesTbody');
     if (!tbody) return;
@@ -284,7 +286,7 @@ function renderDevoluciones() {
     el = document.getElementById('devTotalUnidades'); if(el) el.textContent = totalUnid.toLocaleString('en-US');
     el = document.getElementById('devTotalMonto');   if(el) el.textContent = '$'+totalMonto.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
-var state = { semana: null, semanas_sel: null, tienda: null, tiendas_sel: null, producto: null, productos_sel: null, view: 'producto', tiendaT: null, invMode: null, invSelected: null, compMode: 'semanas', drillSem: null, drillTienda: null, resumenMode: 'semanas', resumenPivot: 'tienda', reabastoWindow: 3 };
+var state = { semana: null, semanas_sel: null, tienda: null, tiendas_sel: null, producto: null, productos_sel: null, view: 'producto', tiendaT: null, invMode: null, invSelected: null, invSubTab: 'inventario', compMode: 'semanas', drillSem: null, drillTienda: null, resumenMode: 'semanas', resumenPivot: 'tienda', reabastoWindow: 3 };
 var DIAS  = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
 var MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 
@@ -1552,6 +1554,7 @@ function renderInventario(){
   document.getElementById('viewInventario').style.display = 'grid';
 
   var det = DATA.detalle_inventario;
+  
   if(!det || !det.fechas || det.fechas.length === 0){
     document.getElementById('tInvTiendaHead').innerHTML = '<tr><th colspan="2">Sin datos en hoja Detalle</th></tr>';
     document.getElementById('tInvTienda').innerHTML = '';
@@ -2132,6 +2135,334 @@ function roundUpToMultiple(qty, multiple){
   var mult = (isFinite(multiple) && multiple > 0) ? multiple : 1;
   if(mult <= 1) return Math.ceil(qty);
   return Math.ceil(qty / mult) * mult;
+}
+
+/* Recomendación informativa para Programado.
+   No escribe en Capture SEM ni en Supabase: solamente calcula una referencia
+   auditable para que el usuario decida si la captura manualmente. */
+function buildProgramacionIaSuggestion(producto, tienda, selectedWeeks, dayGroups){
+  var resumen = DATA.resumen_diario || {};
+  var storeData = resumen[tienda] || {};
+  var requestedWeeks = (selectedWeeks || []).map(function(week){ return String(week); }).sort(function(a,b){
+    return (parseInt(a,10)||0)-(parseInt(b,10)||0);
+  });
+  if(!requestedWeeks.length) return null;
+
+  function weekNumber(raw){
+    var n = parseInt(String(raw || ''),10) || 0;
+    return n > 9999 ? n % 100 : n;
+  }
+  function weekSerial(raw){
+    var n = parseInt(String(raw || ''),10) || 0;
+    if(n > 9999) return n;
+    if(n >= 1000) return (2000 + Math.floor(n/100))*100 + (n%100);
+    var ref = parseInt(requestedWeeks[requestedWeeks.length-1],10) || 0;
+    var year = ref > 9999 ? Math.floor(ref/100) : new Date().getFullYear();
+    return year*100+n;
+  }
+  var referenceWeek = requestedWeeks[requestedWeeks.length-1];
+  var referenceSerial = weekSerial(referenceWeek);
+  var targetWeek = weekNumber(referenceWeek) + 1;
+  /* La semana seleccionada marca el corte, no limita la memoria del modelo.
+     Se buscan automáticamente hasta cuatro semanas con datos reales. */
+  var weeks = Object.keys(storeData).filter(function(week){
+    var productData = ((storeData[week] || {})[producto]) || {};
+    var hasOperationalData = Object.keys(productData).some(function(dateKey){
+      var cell = productData[dateKey] || {};
+      return Number(cell.ventas || 0) > 0 || Number(cell.embarque || 0) > 0;
+    });
+    return weekSerial(week) <= referenceSerial && hasOperationalData;
+  }).sort(function(a,b){ return weekSerial(a)-weekSerial(b); }).slice(-4);
+  if(!weeks.length) return null;
+  var byDow = [[],[],[],[],[],[],[]];
+  var ventasPorFecha = {};
+  var weekStats = {};
+  var totalSales = 0;
+  var totalShipments = 0;
+  var shipmentDowStats = [0,1,2,3,4,5,6].map(function(){ return {weeks:0, qty:0}; });
+  var shipmentDaysPerWeek = [];
+
+  /* Venta histórica de las semanas seleccionadas. La media se calcula por
+     día de la semana, así una semana en progreso no convierte días futuros en 0. */
+  weeks.forEach(function(week, weekIndex){
+    var productData = ((storeData[week] || {})[producto]) || {};
+    var stat = {sales:0, shipments:0, days:0, byDow:[0,0,0,0,0,0,0], dows:{}, shipmentDows:{}};
+    Object.keys(productData).forEach(function(dateKey){
+      var cell = productData[dateKey] || {};
+      var dt = parseResumenDate(dateKey);
+      if(!dt) return;
+      var sales = Number(cell.ventas || 0);
+      var shipments = Number(cell.embarque || 0);
+      byDow[dt.getDay()].push({value:sales, recency:weekIndex});
+      ventasPorFecha[dateKey] = sales;
+      totalSales += sales;
+      totalShipments += shipments;
+      stat.sales += sales;
+      stat.shipments += shipments;
+      if(shipments > 0){
+        stat.shipmentDows[dt.getDay()] = true;
+        shipmentDowStats[dt.getDay()].qty += shipments;
+      }
+      stat.byDow[dt.getDay()] += sales;
+      if(!stat.dows[dt.getDay()]){
+        stat.dows[dt.getDay()] = true;
+        stat.days += 1;
+      }
+    });
+    var shipmentDowsThisWeek = Object.keys(stat.shipmentDows).map(function(dow){ return Number(dow); });
+    if(shipmentDowsThisWeek.length){
+      shipmentDaysPerWeek.push(shipmentDowsThisWeek.length);
+      shipmentDowsThisWeek.forEach(function(dow){ shipmentDowStats[dow].weeks += 1; });
+    }
+    weekStats[week] = stat;
+  });
+
+  var forecastByDow = [0,0,0,0,0,0,0];
+  byDow.forEach(function(observations, dow){
+    if(!observations.length) return;
+    var weighted = 0;
+    var weightSum = 0;
+    observations.forEach(function(obs, index){
+      var weight = index + 1;
+      weighted += obs.value * weight;
+      weightSum += weight;
+    });
+    forecastByDow[dow] = weightSum ? weighted / weightSum : 0;
+  });
+
+  var weeklyForecast = forecastByDow.reduce(function(sum,value){ return sum + value; },0);
+  if(!(weeklyForecast > 0) && !(totalSales > 0)) return null;
+  var observedDays = Object.keys(ventasPorFecha).length;
+  var avgDaily = observedDays ? totalSales / observedDays : 0;
+  var maxDaysForModel = weeks.reduce(function(max,week){ return Math.max(max,(weekStats[week] || {}).days || 0); },0);
+  var completeDemandWeeks = weeks.filter(function(week){ return ((weekStats[week] || {}).days || 0) >= maxDaysForModel; });
+  var weeklySamples = completeDemandWeeks.map(function(week){ return Number((weekStats[week] || {}).sales || 0); });
+  var weeklyMean = weeklySamples.length ? weeklySamples.reduce(function(sum,value){ return sum+value; },0)/weeklySamples.length : weeklyForecast;
+  var weeklyVariance = weeklySamples.length > 1 ? weeklySamples.reduce(function(sum,value){ var diff=value-weeklyMean; return sum+diff*diff; },0)/weeklySamples.length : 0;
+  var weeklyStd = Math.sqrt(weeklyVariance);
+  var preliminaryDeliveryCount = 1;
+  if(shipmentDaysPerWeek.length){
+    var preliminaryCadence = shipmentDaysPerWeek.slice().sort(function(a,b){ return a-b; });
+    preliminaryDeliveryCount = preliminaryCadence[Math.floor((preliminaryCadence.length-1)/2)] || 1;
+  }
+  var targetServiceLevel = 0.95;
+  var serviceZ = 1.645;
+  var safetyDays = getSafetyDays(avgDaily, ventasPorFecha);
+  var fallbackSafety = avgDaily * safetyDays;
+  var safetyQty = weeklySamples.length > 1
+    ? Math.max(avgDaily, serviceZ * weeklyStd * Math.sqrt(1/Math.max(1,preliminaryDeliveryCount)))
+    : fallbackSafety;
+  var sellThru = totalShipments > 0 ? (totalSales / totalShipments) * 100 : null;
+  /* Cuando casi todo lo embarcado se vende, POS puede estar censurado por falta
+     de producto. Se agrega un impulso moderado para proteger ventas potenciales. */
+  var availabilityUpliftPct = sellThru !== null && sellThru >= 90 ? Math.min(0.15, Math.max(0.03,(sellThru-90)/100)) : 0;
+  var availabilityUpliftQty = weeklyForecast * availabilityUpliftPct;
+  var requiredRaw = Math.max(0, weeklyForecast + safetyQty + availabilityUpliftQty);
+  var multiple = getOrderMultiple(producto);
+  var requiredTotal = roundUpToMultiple(requiredRaw, multiple);
+  var statisticalTotal = requiredTotal;
+
+  var historicalMaxObservedDays = weeks.reduce(function(max,week){
+    return Math.max(max,(weekStats[week] || {}).days || 0);
+  },0);
+  var completeWeeks = weeks.filter(function(week){
+    return ((weekStats[week] || {}).days || 0) >= historicalMaxObservedDays;
+  });
+  var confirmedDeclines = 0;
+  for(var declineIndex = Math.max(1, completeWeeks.length-2); declineIndex < completeWeeks.length; declineIndex++){
+    var beforeSales = Number((weekStats[completeWeeks[declineIndex-1]] || {}).sales || 0);
+    var afterSales = Number((weekStats[completeWeeks[declineIndex]] || {}).sales || 0);
+    if(beforeSales > 0 && afterSales < beforeSales * 0.95) confirmedDeclines += 1;
+  }
+  var sustainedDecline = completeWeeks.length >= 3 && confirmedDeclines >= 2;
+
+  var typicalDeliveryCount = preliminaryDeliveryCount;
+  var productDeliveryDays = [0,1,2,3,4,5,6].filter(function(dow){
+    return shipmentDowStats[dow].weeks > 0;
+  }).sort(function(a,b){
+    return shipmentDowStats[b].weeks - shipmentDowStats[a].weeks ||
+      shipmentDowStats[b].qty - shipmentDowStats[a].qty ||
+      forecastByDow[b] - forecastByDow[a];
+  });
+  if(typicalDeliveryCount > 0) productDeliveryDays = productDeliveryDays.slice(0, typicalDeliveryCount);
+
+  var deliveryDays = productDeliveryDays.slice();
+  if(!deliveryDays.length) deliveryDays = (getStoreSchedules()[tienda] || []).slice();
+  if(!deliveryDays.length){
+    var ruta = (DATA.tienda_ruta && DATA.tienda_ruta[tienda]) || '';
+    deliveryDays = (getRouteSchedules()[ruta] || []).slice();
+  }
+  var visibleDows = (dayGroups || []).map(function(group){ return group.dow; }).filter(function(dow){ return dow !== null; });
+  deliveryDays = deliveryDays.filter(function(dow){ return visibleDows.indexOf(dow) >= 0; });
+  if(!deliveryDays.length){
+    deliveryDays = visibleDows.slice().sort(function(a,b){ return forecastByDow[b]-forecastByDow[a]; }).slice(0,2);
+  }
+  if(typicalDeliveryCount > 0 && deliveryDays.length > typicalDeliveryCount){
+    deliveryDays = deliveryDays.slice(0, typicalDeliveryCount);
+  }
+
+  var deliveryForecast = deliveryDays.reduce(function(sum,dow){ return sum + (forecastByDow[dow] || 0); },0);
+  var allocations = {};
+  var allocated = 0;
+  deliveryDays.forEach(function(dow,index){
+    var qty;
+    if(index === deliveryDays.length-1){
+      qty = Math.max(0, requiredTotal - allocated);
+    } else {
+      var share = deliveryForecast > 0 ? (forecastByDow[dow] || 0) / deliveryForecast : 1 / deliveryDays.length;
+      qty = multiple > 1 ? Math.round((requiredTotal * share) / multiple) * multiple : Math.round(requiredTotal * share);
+      qty = Math.max(0, qty);
+      allocated += qty;
+    }
+    allocations[dow] = qty;
+  });
+
+  var backtestError = 0;
+  var backtestActual = 0;
+  for(var testIndex=1; testIndex<weeks.length; testIndex++){
+    var actualTest = weekStats[weeks[testIndex]] || {byDow:[],dows:{}};
+    Object.keys(actualTest.dows || {}).forEach(function(dowKey){
+      var priorValues = weeks.slice(0,testIndex).map(function(week){ return Number((weekStats[week] || {}).byDow[dowKey] || 0); });
+      if(!priorValues.length) return;
+      var predicted = priorValues.reduce(function(sum,value){ return sum+value; },0)/priorValues.length;
+      var actual = Number(actualTest.byDow[dowKey] || 0);
+      backtestError += Math.abs(actual-predicted);
+      backtestActual += actual;
+    });
+  }
+  var forecastWape = backtestActual > 0 ? (backtestError/backtestActual)*100 : null;
+  var nonZeroDaily = Object.keys(ventasPorFecha).map(function(key){ return Number(ventasPorFecha[key] || 0); }).filter(function(value){ return value > 0; });
+  var dailyMean = nonZeroDaily.length ? nonZeroDaily.reduce(function(sum,value){ return sum+value; },0)/nonZeroDaily.length : 0;
+  var dailyVariance = nonZeroDaily.length > 1 ? nonZeroDaily.reduce(function(sum,value){ var diff=value-dailyMean; return sum+diff*diff; },0)/nonZeroDaily.length : 0;
+  var demandAdi = nonZeroDaily.length ? observedDays/nonZeroDaily.length : 99;
+  var demandCv2 = dailyMean > 0 ? dailyVariance/(dailyMean*dailyMean) : 99;
+  var demandPattern = demandAdi < 1.32 ? (demandCv2 < 0.49 ? 'estable' : 'errático') : (demandCv2 < 0.49 ? 'intermitente' : 'irregular');
+  /* Sin conteo físico la confianza máxima es media; WAPE evita presentar como
+     segura una recomendación cuyo historial ha sido difícil de pronosticar. */
+  var confidence = weeks.length >= 3 && observedDays >= 14 && (forecastWape === null || forecastWape <= 35) ? 'Media' : 'Baja';
+  var weekLabels = weeks.map(function(week){ return resumenSemLabel(week); });
+  var reasonParts = [];
+  var explanationLines = [];
+  var maxObservedDays = historicalMaxObservedDays;
+  var latestWeek = weeks[weeks.length-1];
+  var previousWeek = weeks.length > 1 ? weeks[weeks.length-2] : null;
+  var latestStat = weekStats[latestWeek] || {sales:0,days:0,byDow:[]};
+  var partialMessage = '';
+  if(latestStat.days < maxObservedDays){
+    partialMessage = 'La semana '+resumenSemLabel(latestWeek)+' está en progreso ('+latestStat.days+' de '+maxObservedDays+' días con información); los días faltantes no se tomaron como ventas en cero.';
+  }
+  var movementSummary = 'No hay una semana anterior comparable suficiente para afirmar una tendencia.';
+  if(previousWeek){
+    var previousStat = weekStats[previousWeek] || {sales:0,byDow:[]};
+    var previousComparable = 0;
+    Object.keys(latestStat.dows || {}).forEach(function(dow){ previousComparable += Number(previousStat.byDow[dow] || 0); });
+    var currentComparable = latestStat.sales || 0;
+    var movementPct = previousComparable > 0 ? ((currentComparable-previousComparable)/previousComparable)*100 : null;
+    if(movementPct !== null){
+      var movementLabel = movementPct > 5 ? 'subieron' : movementPct < -5 ? 'bajaron' : 'se mantuvieron';
+      movementSummary = 'Las ventas POS '+movementLabel+' '+Math.abs(movementPct).toFixed(1)+'% contra la semana '+resumenSemLabel(previousWeek)+', comparando únicamente los mismos días.';
+    } else if(currentComparable > 0){
+      movementSummary = 'Se detectó venta nueva frente a la semana '+resumenSemLabel(previousWeek)+'.';
+    }
+  }
+  var dayNames = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  var cadenceText = typicalDeliveryCount > 0
+    ? typicalDeliveryCount+' entrega'+(typicalDeliveryCount === 1 ? '' : 's')+' por semana ('+deliveryDays.map(function(dow){ return dayNames[dow]; }).join(' y ')+')'
+    : 'cadencia tomada del calendario operativo disponible';
+  var formulaText = 'Pronóstico POS '+Math.round(weeklyForecast)+' + protección de servicio '+Math.round(safetyQty)+(availabilityUpliftQty > 0 ? ' + oportunidad de venta '+Math.round(availabilityUpliftQty) : '')+' = sugerencia '+requiredTotal+' unidades.';
+  var sellThruText = sellThru !== null
+    ? 'Sell thru histórico '+sellThru.toFixed(1)+'%: '+(sellThru >= 90 ? 'la rotación es fuerte y conviene proteger disponibilidad.' : sellThru >= 75 ? 'la rotación es saludable; se recomienda ajustar con prudencia.' : 'la rotación es baja; existe margen para reducir, pero de forma gradual.')
+    : 'No hay embarques suficientes para calcular sell thru; la recomendación se apoya principalmente en ventas POS.';
+  var decisionType = requiredTotal > 0 ? 'Enviar '+requiredTotal+' unidades' : 'Sin envío adicional';
+  var decisionText = requiredTotal > 0
+    ? 'Se recomiendan '+requiredTotal+' unidades para alcanzar un nivel de servicio objetivo de '+Math.round(targetServiceLevel*100)+'% y proteger la oportunidad de venta.'
+    : 'No existe demanda POS suficiente en el historial para generar una reposición automática; requiere revisión manual.';
+  explanationLines.push('Datos analizados: '+weeks.length+' semanas con operación real ('+weekLabels.join(', ')+'). Las semanas o plantillas totalmente en cero fueron excluidas.');
+  if(partialMessage) explanationLines.push(partialMessage);
+  explanationLines.push(
+    movementSummary,
+    'Patrón de demanda: '+demandPattern+(forecastWape !== null ? ' · error histórico WAPE '+forecastWape.toFixed(1)+'%' : '')+'.',
+    formulaText,
+    'No se descontó inventario supuesto: al no existir conteo físico, Embarque se usa para medir rotación y frecuencia, no como saldo disponible.',
+    sellThruText,
+    'Distribución sugerida: '+cadenceText+'.',
+    decisionText
+  );
+  reasonParts = explanationLines.slice();
+
+  return {
+    targetWeek: targetWeek,
+    values: (dayGroups || []).map(function(group){
+      return group.dow === null ? requiredTotal : Number(allocations[group.dow] || 0);
+    }),
+    total: requiredTotal,
+    forecast: weeklyForecast,
+    inventory: null,
+    safety: safetyQty,
+    sellThru: sellThru,
+    confidence: confidence,
+    decision: decisionType,
+    explanationLines: explanationLines,
+    statisticalTotal: statisticalTotal,
+    targetServiceLevel: targetServiceLevel,
+    forecastWape: forecastWape,
+    demandPattern: demandPattern,
+    availabilityUplift: availabilityUpliftQty,
+    reason: reasonParts.join(' · ')
+  };
+}
+
+/* Interruptor temporal: conservar la lógica lista para reactivarla sin mostrarla. */
+var PROGRAMACION_IA_ENABLED = false;
+
+function renderProgramacionIaReasonPanel(items){
+  var host = document.getElementById('programacionIaReasons');
+  if(!host) return;
+  var rows = items || [];
+  if(!rows.length){
+    host.innerHTML = '';
+    host.style.display = 'none';
+    return;
+  }
+  host.style.display = 'block';
+  host.innerHTML = '<h3 class="programacion-ia-side-title">Razones de la sugerencia</h3>'+rows.map(function(item){
+    var suggestion = item.suggestion || {};
+    var explanationLines = Array.isArray(suggestion.explanationLines) ? suggestion.explanationLines : [];
+    var explanationHtml = explanationLines.length
+      ? '<ul>'+explanationLines.map(function(line){ return '<li>'+_resumenAnalysisEscape(line)+'</li>'; }).join('')+'</ul>'
+      : '<p>'+_resumenAnalysisEscape(suggestion.reason || '')+'</p>';
+    return '<article class="programacion-ia-card">'+
+      '<div class="programacion-ia-card-head"><span>'+_resumenAnalysisEscape(item.tienda)+' · '+_resumenAnalysisEscape(item.producto)+'</span><span>Semana '+_resumenAnalysisEscape(suggestion.targetWeek)+' · '+fmt(suggestion.total || 0)+' unidades</span></div>'+
+      '<div class="programacion-ia-decision">DECISIÓN: '+_resumenAnalysisEscape(suggestion.decision || 'Revisar')+' · Confianza '+_resumenAnalysisEscape((suggestion.confidence || '').toLowerCase())+'</div>'+
+      explanationHtml+'</article>';
+  }).join('');
+
+  /* Alinea cada explicación con su fila sin alterar el ancho ni los rowspans de la tabla. */
+  window.requestAnimationFrame(function(){
+    if(window.innerWidth <= 1150) return;
+    var table = document.getElementById('tResumen');
+    var mainBox = host.closest('.resumen-main-box');
+    if(table && mainBox){
+      var tableRect = table.getBoundingClientRect();
+      var mainRect = mainBox.getBoundingClientRect();
+      var availableWidth = document.documentElement.clientWidth - tableRect.right - 28;
+      host.style.left = Math.ceil(tableRect.right - mainRect.left + 20)+'px';
+      host.style.right = 'auto';
+      host.style.width = Math.max(190, Math.min(680, availableWidth))+'px';
+    }
+    var aiRows = Array.prototype.slice.call(document.querySelectorAll('#tResumenBody .programacion-ia-row'));
+    var cards = Array.prototype.slice.call(host.querySelectorAll('.programacion-ia-card'));
+    var hostTop = host.getBoundingClientRect().top;
+    var nextFreeTop = 34;
+    cards.forEach(function(card, index){
+      var sourceRow = aiRows[index];
+      if(!sourceRow) return;
+      var desiredTop = Math.max(34, Math.round(sourceRow.getBoundingClientRect().top - hostTop));
+      var finalTop = Math.max(desiredTop, nextFreeTop);
+      card.style.top = finalTop+'px';
+      nextFreeTop = finalTop + card.offsetHeight + 8;
+    });
+  });
 }
 
 function getPriorityLabel(avgDiaria, diasCobertura, daysToNextRoute, orderFinal, routeDetected){
@@ -3480,44 +3811,69 @@ function _exportCaptureToCSV(modeKey, subColLabels) {
     return;
   }
 
-  function csvRow(arr) {
-    return arr.map(function(c) {
-      return '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"';
-    }).join(',');
+  var semanas = Object.keys(bySemana).sort();
+
+  function buildAndDownloadExcel() {
+    var wb = XLSX.utils.book_new();
+
+    semanas.forEach(function(sem) {
+      var ws_data = [];
+      ws_data.push(['Cronograma entregas semana ' + sem]);
+      ws_data.push(['Ruta', 'Tienda', 'Dia/Periodo'].concat(productosOrden));
+
+      var tiendas = Object.keys(bySemana[sem]).sort();
+      tiendas.forEach(function(tienda) {
+        var ruta = tiendaRuta[tienda] || 'Sin ruta';
+        subColLabels.forEach(function(rowLabel, rowIdx) {
+          var rowData = (bySemana[sem][tienda] && bySemana[sem][tienda][rowLabel]) || {};
+          var rowVals = productosOrden.map(function(p) {
+            return rowData[p] != null ? Number(rowData[p]) : ''; // Convertir a número para Excel
+          });
+          var rutaCol   = rowIdx === 0 ? ruta   : '';
+          var tiendaCol = rowIdx === 0 ? tienda : '';
+          ws_data.push([rutaCol, tiendaCol, rowLabel].concat(rowVals));
+        });
+      });
+
+      var ws = XLSX.utils.aoa_to_sheet(ws_data);
+      
+      // Ajustar anchos de columna básicos
+      ws['!cols'] = [
+        { wch: 10 }, // Ruta
+        { wch: 30 }, // Tienda
+        { wch: 15 }  // Dia/Periodo
+      ];
+      // Las demás columnas (productos) se autoajustan un poco
+      for(var i=0; i<productosOrden.length; i++) {
+        ws['!cols'].push({ wch: 12 });
+      }
+
+      // Evitar caracteres inválidos en el nombre de la hoja (max 31 chars)
+      var sheetName = ("Semana " + sem).replace(/[\\\/\?\*\[\]]/g, '').substring(0, 31);
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    });
+
+    XLSX.writeFile(wb, 'Cronograma_Entregas_Captura.xlsx');
   }
 
-  var semanas = Object.keys(bySemana).sort();
-  var lines = [];
-
-  semanas.forEach(function(sem, si) {
-    if (si > 0) lines.push('');
-    lines.push(csvRow(['Cronograma entregas semana ' + sem]));
-    lines.push(csvRow(['Ruta', 'Tienda', 'Dia/Periodo'].concat(productosOrden)));
-
-    var tiendas = Object.keys(bySemana[sem]).sort();
-    tiendas.forEach(function(tienda) {
-      var ruta = tiendaRuta[tienda] || 'Sin ruta';
-      subColLabels.forEach(function(rowLabel, rowIdx) {
-        var rowData = (bySemana[sem][tienda] && bySemana[sem][tienda][rowLabel]) || {};
-        var rowVals = productosOrden.map(function(p) {
-          return rowData[p] != null ? rowData[p] : '';
-        });
-        /* Solo poner Ruta y Tienda en la primera fila de cada tienda */
-        var rutaCol   = rowIdx === 0 ? ruta   : '';
-        var tiendaCol = rowIdx === 0 ? tienda : '';
-        lines.push(csvRow([rutaCol, tiendaCol, rowLabel].concat(rowVals)));
-      });
-    });
-  });
-
-  var csvContent = lines.join('\n');
-  var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url;
-  a.download = 'Cronograma_Entregas_Captura.csv';
-  a.click();
-  URL.revokeObjectURL(url);
+  // Carga dinámica (Lazy Load) de SheetJS para generar el Excel real (.xlsx)
+  if (typeof XLSX !== 'undefined') {
+    buildAndDownloadExcel();
+  } else {
+    // Mostrar un pequeño indicador en el cursor mientras carga
+    document.body.style.cursor = 'wait';
+    var script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    script.onload = function() {
+      document.body.style.cursor = 'default';
+      buildAndDownloadExcel();
+    };
+    script.onerror = function() {
+      document.body.style.cursor = 'default';
+      alert('Error al cargar la librería para exportar Excel. Revisa tu conexión a internet.');
+    };
+    document.head.appendChild(script);
+  }
 }
 
 function syncCaptureProjFromBlock(i1, r2i) {
@@ -4755,14 +5111,17 @@ function renderResumenAnalysis(){
               treeMetricCells(row)+'</tr>';
             return;
           }
-          var weeklyStoreRowspan = weeklyProductRows.length + 1;
+          var weeklyHasStoreTotal = weeklyProductRows.length > 1;
+          var weeklyStoreRowspan = weeklyProductRows.length + (weeklyHasStoreTotal ? 1 : 0);
           weeklyProductRows.forEach(function(productRow, productIndex){
             body += '<tr class="analysis-pivot-product-total analysis-pivot-week-product-row">'+
               (productIndex === 0 ? '<td data-field="name" rowspan="'+weeklyStoreRowspan+'" class="analysis-pivot-store-cell expanded" onclick="toggleResumenStoreProducts('+weeklyStoreIndex+')" title="Hide products"><span class="analysis-expander" aria-hidden="true">&#9662;</span>'+_resumenAnalysisEscape(row.key)+'</td>' : '')+
               '<td data-field="product" class="analysis-pivot-product-cell analysis-pivot-product-static">'+_resumenAnalysisEscape(productRow.key.replace(/^BQT\s+/i,''))+'</td>'+
               treeMetricCells(productRow)+'</tr>';
           });
-          body += '<tr class="analysis-pivot-store-total"><td data-field="product">Store Total</td>'+treeMetricCells(row)+'</tr>';
+          if(weeklyHasStoreTotal){
+            body += '<tr class="analysis-pivot-store-total"><td data-field="product">Store Total</td>'+treeMetricCells(row)+'</tr>';
+          }
           return;
         }
         if(isStoreTable && analysis.mode === 'day' && state.resumenAnalysisProductField){
@@ -4785,7 +5144,8 @@ function renderResumenAnalysis(){
             var collapsed = state.resumenCollapsedProductDayTrees && state.resumenCollapsedProductDayTrees[productTreeKey];
             return {row:productRow, index:productIndex, collapsed:!!collapsed, rowCount:pivotSingleDay ? 1 : 1+(collapsed ? 0 : analysis.selectedDays.length)};
           });
-          var pivotStoreRowspan = pivotBlocks.reduce(function(sum,block){ return sum+block.rowCount; }, pivotSingleDay ? 0 : 1);
+          var pivotHasStoreTotal = !pivotSingleDay && pivotStoreProducts.length > 1;
+          var pivotStoreRowspan = pivotBlocks.reduce(function(sum,block){ return sum+block.rowCount; }, pivotHasStoreTotal ? 1 : 0);
           var firstPivotRow = true;
           pivotBlocks.forEach(function(block){
             var pivotDaySource = ((((analysis.byPairDay || {})[row.key] || {})[block.row.key]) || {});
@@ -4822,7 +5182,7 @@ function renderResumenAnalysis(){
               });
             }
           });
-          if(!pivotSingleDay){
+          if(pivotHasStoreTotal){
             body += '<tr class="analysis-pivot-store-total"><td data-field="product" colspan="2">Store Total</td>'+treeMetricCells(row)+'</tr>';
           }
           return;
@@ -5214,6 +5574,8 @@ document.addEventListener('mousemove', function(event){
 });
 
 function renderResumen(){
+  /* Evita conservar explicaciones de una vista o filtro anterior. */
+  renderProgramacionIaReasonPanel([]);
   if(window._skipCaptureSaveOnce) {
     window._skipCaptureSaveOnce = false;
   } else {
@@ -5385,7 +5747,17 @@ function renderResumen(){
       var rows = document.querySelectorAll('[data-group="'+id+'"]');
       if(!rows.length) return;
       var isHidden = rows[0].style.display === 'none';
-      rows.forEach(function(r){ r.style.display = isHidden ? '' : 'none'; });
+      rows.forEach(function(r){ 
+        if (isHidden) {
+          if (r.getAttribute('data-capture-initial') === '1' && r.getAttribute('data-capture-revealed') !== '1') {
+            r.style.display = 'none';
+          } else {
+            r.style.display = '';
+          }
+        } else {
+          r.style.display = 'none';
+        }
+      });
       var btn = document.querySelector('[data-togbtn="'+id+'"]');
       if(btn) btn.innerText = isHidden ? '−' : '+';
     };
@@ -5507,6 +5879,7 @@ function renderResumen(){
         semEl.value = window._nextSemanaProyeccion;
       }
       tr.style.display = '';
+      tr.setAttribute('data-capture-revealed', '1');
       window.bumpResumenRowspans(r1i, r2i);
     };
 
@@ -5742,21 +6115,46 @@ function renderResumen(){
     window.addCaptureRowAll = _addGlobalCaptureDraftWeek;
     window.removeCaptureRowAll = _removeGlobalCaptureDraftWeek;
 
+    var programacionIaReasons = [];
     pivot.primaryKeys.forEach(function(r1Key, i1){
       var r1Data = pivot.rowsData[r1Key];
-      var r2Keys = Object.keys(r1Data.subRows).sort();
+      var r2Keys = Object.keys(r1Data.subRows).sort().filter(function(r2k){
+        /* El Excel local conserva combinaciones tienda/producto vacías. No
+           mostrarlas salvo que tengan movimiento o una fila programada. */
+        if(_getSavedProgramadoRows(r1Key, r2k).length) return true;
+        var totals = (r1Data.subRows[r2k] || {})._total || {};
+        return Object.keys(totals).some(function(columnKey){
+          var values = totals[columnKey] || {};
+          return ['embarque','ventas','merma','venta_pos','field1'].some(function(metric){
+            return Math.abs(Number(values[metric] || 0)) > 0;
+          });
+        });
+      });
+      if(!r2Keys.length) return;
       var hasSellThru = defs.some(function(d){ return d.key === 'sell_thru'; });
       var hasCumulative = (hasSellThru && semsResumen.length >= 2) ? 1 : 0;
       var baseR2RowCount = defs.length * semsResumen.length + hasCumulative;
       /* Precomputar filas programado por r2 */
       var r2ProgRowsMap = {};
+      var r2AiSuggestionMap = {};
       var totalProgRows = 0;
+      var totalAiRows = 0;
       r2Keys.forEach(function(r2k){
         var pr = _getSavedProgramadoRows(r1Key, r2k);
         r2ProgRowsMap[r2k] = pr;
         totalProgRows += pr.length;
+        var aiProducto = pivotMode === 'producto' ? r1Key : r2k;
+        var aiTienda = pivotMode === 'producto' ? r2k : r1Key;
+        var aiSuggestion = PROGRAMACION_IA_ENABLED
+          ? buildProgramacionIaSuggestion(aiProducto, aiTienda, semsResumen, dayGroups)
+          : null;
+        r2AiSuggestionMap[r2k] = aiSuggestion;
+        if(aiSuggestion){
+          totalAiRows += 1;
+          programacionIaReasons.push({tienda:aiTienda, producto:aiProducto, suggestion:aiSuggestion});
+        }
       });
-      var r1Span = r2Keys.length * baseR2RowCount + totalProgRows;
+      var r1Span = r2Keys.length * baseR2RowCount + totalProgRows + totalAiRows;
       var id1 = 'grp-'+i1;
 
       r2Keys.forEach(function(r2Key, r2i){
@@ -5765,7 +6163,8 @@ function renderResumen(){
         var borderTop = isFirstR2 ? '2px solid #b0bcd8' : '1px solid #e4e8f0';
         var r2Bg = r2i % 2 === 0 ? '#ffffff' : '#f4f6fa';
         var savedProgRows = r2ProgRowsMap[r2Key] || [];
-        var r2RowCount = baseR2RowCount + savedProgRows.length;
+        var aiSuggestion = r2AiSuggestionMap[r2Key] || null;
+        var r2RowCount = baseR2RowCount + savedProgRows.length + (aiSuggestion ? 1 : 0);
 
         /* ── Filas Programado (arriba de embarque) ── */
         var hasProgRows = savedProgRows.length > 0;
@@ -5812,6 +6211,33 @@ function renderResumen(){
           bodySemanal.push(pRow);
         });
 
+        /* Sugerencia informativa: se muestra aparte y nunca se persiste. */
+        if(aiSuggestion){
+          var aiBg = '#e8f4ff';
+          var aiBorder = hasProgRows ? '1px solid #9ec9ed' : borderTop;
+          var aiRow = '<tr class="programacion-ia-row" style="background:'+aiBg+';border-top:'+aiBorder+'">';
+          if(isFirstR2 && !hasProgRows){
+            aiRow +=
+              '<td class="'+(pivotMode === 'producto' ? 'resumen-product-name' : 'resumen-store-name')+'" rowspan="'+r1Span+'" data-r1-rowspan="'+i1+'" style="font-size:15px;font-weight:bold;vertical-align:top;'+
+              'white-space:nowrap;padding:5px 8px;border-right:1px solid #c8d2e8;'+
+              'border-top:2px solid #b0bcd8;background:#eef2fa">'+
+              '<span data-togbtn="'+id1+'" style="'+TOG_STYLE_SEM+'" onclick="toggleResumenLevel(\''+id1+'\')">−</span>'+r1Key+'</td>';
+          }
+          if(!hasProgRows){
+            aiRow +=
+              '<td class="'+(pivotMode === 'tienda' ? 'resumen-product-name' : 'resumen-store-name')+'" rowspan="'+r2RowCount+'" data-r2-rowspan="'+i1+'_'+r2i+'" data-group="'+id1+'" style="vertical-align:top;white-space:nowrap;padding:4px 6px;'+
+              'border-top:'+borderTop+';border-right:1px solid #d0d8ea;font-size:14px;color:#2980B9;font-weight:600;background:'+r2Bg+'">'+r2Key+'</td>';
+          }
+          aiRow += '<td data-group="'+id1+'" style="background:'+aiBg+';padding:4px 6px;white-space:nowrap;font-size:14px;font-weight:600;color:#075985;border-right:1px solid #9ec9ed;text-align:left">Sugerencia IA '+
+            '<span style="font-size:13px;color:#0c4a6e;background:#bae6fd;border-radius:3px;padding:1px 5px">'+aiSuggestion.targetWeek+'</span></td>';
+          dayGroups.forEach(function(group, gi){
+            var aiValue = Number(aiSuggestion.values[gi] || 0);
+            aiRow += '<td data-group="'+id1+'" style="font-size:14px;color:#075985;background:'+aiBg+';text-align:right;width:68px;min-width:68px;max-width:68px;padding:4px 8px;vertical-align:middle">'+(aiValue ? fmt(aiValue) : '')+'</td>';
+          });
+          aiRow += '<td data-group="'+id1+'" style="font-size:14px;font-weight:bold;color:#075985;background:'+aiBg+';text-align:right;width:82px;min-width:82px;padding:4px 8px;border-left:2px solid #60a5fa">'+fmt(aiSuggestion.total)+'</td></tr>';
+          bodySemanal.push(aiRow);
+        }
+
         defs.forEach(function(def, di){
           var rowBg = r2i % 2 === 0 ? (def.bgEven || '#ffffff') : (def.bgOdd || '#f4f6fa');
           var isFirstDef = (di === 0);
@@ -5820,7 +6246,7 @@ function renderResumen(){
           var isVeryFirst = (isFirstR2 && di === 0 && wi === 0);
           var rowHTML = '<tr style="background:'+rowBg+';border-top:'+(isFirstDef && isFirstWeek ? borderTop : '1px solid #edf0f6')+'">';
 
-          if(!hasProgRows && isVeryFirst){
+          if(!hasProgRows && !aiSuggestion && isVeryFirst){
             rowHTML +=
               '<td class="'+(pivotMode === 'producto' ? 'resumen-product-name' : 'resumen-store-name')+'" rowspan="'+r1Span+'" data-r1-rowspan="'+i1+'" style="font-size:15px;font-weight:bold;vertical-align:top;'+
               'white-space:nowrap;padding:5px 8px;border-right:1px solid #c8d2e8;'+
@@ -5828,7 +6254,7 @@ function renderResumen(){
               '<span data-togbtn="'+id1+'" style="'+TOG_STYLE_SEM+'" onclick="toggleResumenLevel(\''+id1+'\')">−</span>'+r1Key+'</td>';
           }
 
-          if(!hasProgRows && isFirstDef && isFirstWeek){
+          if(!hasProgRows && !aiSuggestion && isFirstDef && isFirstWeek){
             rowHTML +=
               '<td class="'+(pivotMode === 'tienda' ? 'resumen-product-name' : 'resumen-store-name')+'" rowspan="'+r2RowCount+'" data-r2-rowspan="'+i1+'_'+r2i+'" data-group="'+id1+'" style="vertical-align:top;white-space:nowrap;padding:4px 6px;'+
               'border-top:'+borderTop+';border-right:1px solid #d0d8ea;font-size:14px;color:#2980B9;font-weight:600;background:'+r2Bg+';">'+
@@ -5992,6 +6418,7 @@ function renderResumen(){
     }
 
     document.getElementById('tResumenBody').innerHTML = bodySemanal.join('');
+    renderProgramacionIaReasonPanel(programacionIaReasons);
     restoreCaptureProjections();
     var btnAddCap = document.getElementById('btnAddCaptureSem');
     if(btnAddCap) btnAddCap.style.display = (window._resumenCaptureBlocks.length ? 'inline-block' : 'none');
@@ -6064,7 +6491,17 @@ function renderResumen(){
     var rows = document.querySelectorAll('[data-group="'+id+'"]');
     if(!rows.length) return;
     var isHidden = rows[0].style.display === 'none';
-    rows.forEach(function(r){ r.style.display = isHidden ? '' : 'none'; });
+    rows.forEach(function(r){ 
+      if (isHidden) {
+        if (r.getAttribute('data-capture-initial') === '1' && r.getAttribute('data-capture-revealed') !== '1') {
+          r.style.display = 'none';
+        } else {
+          r.style.display = '';
+        }
+      } else {
+        r.style.display = 'none';
+      }
+    });
     var btn = document.querySelector('[data-togbtn="'+id+'"]');
     if(btn) btn.innerText = isHidden ? '−' : '+';
   };
@@ -6167,6 +6604,7 @@ function renderResumen(){
     var tr = totEl.closest('tr');
     if(!tr || tr.style.display !== 'none') return;
     tr.style.display = '';
+    tr.setAttribute('data-capture-revealed', '1');
     window.bumpResumenRowspans(r1i, r2i);
   };
 
@@ -7502,18 +7940,254 @@ function answerLocalQuery(message) {
   return 'No reconocí esa consulta. Escribe **ayuda** para ver preguntas compatibles.';
 }
 
-// Reemplaza el chat remoto: esta última declaración es la versión activa.
-function sendChatMessage() {
+function getGeminiChatUrl() {
+  var local = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  return local
+    ? 'http://localhost:8000/api/gemini-chat'
+    : 'https://walmex-api.onrender.com/api/gemini-chat';
+}
+
+// Convierte Markdown a HTML. Soporta: gráficas (```chart), tablas, negritas, listas, headers.
+function renderGeminiMarkdown(text) {
+  if (!text) return '';
+  var chartBlocks = [];
+  var tableBlocks = [];
+  // ── 1. Extraer bloques chart o json que contengan un chart ─────────────────
+  var processed = '';
+  var remaining = text;
+  while (remaining.length > 0) {
+    var cStart = remaining.indexOf('```');
+    if (cStart === -1) { processed += remaining; break; }
+    
+    processed += remaining.slice(0, cStart);
+    var afterBackticks = remaining.slice(cStart + 3);
+    var cEnd = afterBackticks.indexOf('```');
+    
+    if (cEnd === -1) { processed += remaining.slice(cStart); break; }
+    
+    var blockContent = afterBackticks.slice(0, cEnd);
+    var firstLineBreak = blockContent.indexOf('\n');
+    var tag = '';
+    var rawJson = blockContent;
+    
+    if (firstLineBreak !== -1) {
+      tag = blockContent.slice(0, firstLineBreak).trim().toLowerCase();
+      rawJson = blockContent.slice(firstLineBreak + 1).trim();
+    } else {
+      tag = blockContent.trim().toLowerCase();
+      rawJson = '';
+    }
+
+    if (tag === 'chart' || tag === 'json' || tag === '') {
+      try {
+        // Fix trailing commas commonly output by LLMs
+        var cleanJson = rawJson.replace(/,(\s*[\]}])/g, '$1');
+        var cfg = JSON.parse(cleanJson);
+        // Verificar que parezca un config de Chart.js
+        if (cfg.type && cfg.data && cfg.data.datasets) {
+          var chartId = 'walmex-chart-' + Date.now() + '-' + chartBlocks.length;
+          chartBlocks.push({ id: chartId, cfg: cfg });
+          processed += '\x00CHART:' + (chartBlocks.length - 1) + '\x00';
+        } else {
+          processed += '```\n[CHART VALIDATION ERROR: Falta type, data o datasets]\n' + rawJson + '\n```';
+        }
+      } catch(e) {
+        processed += '```\n[CHART PARSE ERROR: ' + e.message + ']\n' + rawJson + '\n```';
+      }
+    } else {
+      processed += '```' + tag + '\n' + rawJson + '\n```';
+    }
+    
+    remaining = afterBackticks.slice(cEnd + 3);
+  }
+  text = processed;
+
+  // ── 2. Extraer tablas Markdown línea por línea ─────────────────────────────
+  var lines = text.split('\n');
+  var outLines = [];
+  var li = 0;
+  while (li < lines.length) {
+    var ln = lines[li];
+    var trimmed = ln.trim();
+    if (trimmed.charAt(0) === '|' && trimmed.charAt(trimmed.length - 1) === '|') {
+      var tLines = [];
+      while (li < lines.length) {
+        var t2 = lines[li].trim();
+        if (t2.charAt(0) === '|') { tLines.push(lines[li]); li++; }
+        else break;
+      }
+      if (tLines.length >= 2) {
+        var hCols = tLines[0].split('|').map(function(c){ return c.trim(); }).filter(Boolean);
+        var isSep = /^[| :-]+$/.test(tLines[1]);
+        var dRows = isSep ? tLines.slice(2) : tLines.slice(1);
+        var tHead = '<thead><tr>' + hCols.map(function(c){
+          return '<th style="padding:6px 10px;background:#1e3a5f;color:#fff;font-size:0.78rem;text-align:center;white-space:nowrap;">' + c + '</th>';
+        }).join('') + '</tr></thead>';
+        var tBody = '<tbody>' + dRows.map(function(row, ri){
+          var cols = row.split('|').map(function(c){ return c.trim(); }).filter(Boolean);
+          var bg = ri % 2 === 0 ? '#f8fafc' : '#fff';
+          return '<tr style="background:' + bg + ';">' + cols.map(function(c){
+            return '<td style="padding:5px 10px;font-size:0.78rem;text-align:center;border-bottom:1px solid #e2e8f0;">' + c + '</td>';
+          }).join('') + '</tr>';
+        }).join('') + '</tbody>';
+        var tbIdx = tableBlocks.length;
+        tableBlocks.push('<div style="overflow-x:auto;margin:8px 0;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,0.08);"><table style="border-collapse:collapse;width:100%;min-width:280px;">' + tHead + tBody + '</table></div>');
+        outLines.push('\x00TABLE:' + tbIdx + '\x00');
+      } else {
+        outLines = outLines.concat(tLines);
+      }
+    } else {
+      outLines.push(ln);
+      li++;
+    }
+  }
+  text = outLines.join('\n');
+
+  // ── 3. Escapar HTML ────────────────────────────────────────────────────────
+  var html = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // ── 4. Bloques de código genérico usando [^] (cualquier char sin backslash) ─
+  html = html.replace(/```[^]*?```/g, function(m) {
+    var code = m.replace(/^```[a-z]*/, '').replace(/```$/, '').trim();
+    return '<pre style="background:#1e293b;color:#e2e8f0;padding:10px 14px;border-radius:8px;overflow-x:auto;font-size:0.78rem;margin:6px 0;white-space:pre-wrap;word-break:break-word;">' + code + '</pre>';
+  });
+
+  // ── 5. Código inline ───────────────────────────────────────────────────────
+  html = html.replace(/`[^`]+`/g, function(m) {
+    return '<code style="background:#dde6ef;color:#1e3a5f;padding:1px 5px;border-radius:4px;font-size:0.8rem;">' + m.slice(1, -1) + '</code>';
+  });
+
+  // ── 6. Headers ─────────────────────────────────────────────────────────────
+  html = html.replace(/^### (.+)$/gm, '<h4 style="margin:10px 0 4px;font-size:0.85rem;color:#1e3a5f;">$1</h4>');
+  html = html.replace(/^## (.+)$/gm,  '<h3 style="margin:10px 0 4px;font-size:0.9rem;color:#1e3a5f;">$1</h3>');
+  html = html.replace(/^# (.+)$/gm,   '<h2 style="margin:10px 0 4px;font-size:0.95rem;color:#1e3a5f;">$1</h2>');
+
+  // ── 7. Negritas y cursivas ─────────────────────────────────────────────────
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*([^*\n]+)\*/g,   '<em>$1</em>');
+
+  // ── 8. Listas ──────────────────────────────────────────────────────────────
+  html = html.replace(/^- (.+)$/gm,        '<li style="margin:2px 0 2px 16px;list-style:disc;">$1</li>');
+  html = html.replace(/^\* (.+)$/gm,       '<li style="margin:2px 0 2px 16px;list-style:disc;">$1</li>');
+  html = html.replace(/^[0-9]+\. (.+)$/gm, '<li style="margin:2px 0 2px 16px;list-style:decimal;">$1</li>');
+
+  // Agrupar <li> consecutivos en <ul>
+  var liOpen = false;
+  html = html.split('\n').map(function(row) {
+    var isLi = row.indexOf('<li ') === 0;
+    if (isLi && !liOpen) { liOpen = true; return '<ul style="padding-left:4px;margin:6px 0;">' + row; }
+    if (!isLi && liOpen) { liOpen = false; return '</ul>' + row; }
+    return row;
+  }).join('\n');
+  if (liOpen) html += '</ul>';
+
+  // ── 9. Líneas horizontales ─────────────────────────────────────────────────
+  html = html.replace(/^---+$/gm,   '<hr style="border:none;border-top:1px solid #cbd5e1;margin:8px 0;">');
+  html = html.replace(/^\*\*\*+$/gm,'<hr style="border:none;border-top:1px solid #cbd5e1;margin:8px 0;">');
+  html = html.replace(/^___+$/gm,   '<hr style="border:none;border-top:1px solid #cbd5e1;margin:8px 0;">');
+
+  // ── 10. Párrafos ───────────────────────────────────────────────────────────
+  html = html.replace(/\n\n/g, '</p><p style="margin:6px 0;">');
+  html = html.replace(/\n/g,   '<br>');
+  html = '<p style="margin:0;">' + html + '</p>';
+
+  // ── 11. Restaurar tablas ───────────────────────────────────────────────────
+  tableBlocks.forEach(function(tbHtml, idx) {
+    html = html.split('\x00TABLE:' + idx + '\x00').join(tbHtml);
+  });
+
+  // ── 12. Restaurar charts ───────────────────────────────────────────────────
+  chartBlocks.forEach(function(cb, idx) {
+    var canvasHtml = '<div style="margin:10px 0;background:#fff;border-radius:10px;padding:10px;box-shadow:0 1px 6px rgba(0,0,0,0.1);">'
+      + '<canvas id="' + cb.id + '" style="max-height:280px;width:100%;"></canvas>'
+      + '</div>';
+    html = html.split('\x00CHART:' + idx + '\x00').join(canvasHtml);
+  });
+
+  // ── 13. Renderizar charts una vez estén en el DOM ─────────────────────────
+  if (chartBlocks.length > 0) {
+    setTimeout(function() {
+      chartBlocks.forEach(function(cb) {
+        var el = document.getElementById(cb.id);
+        if (!el || !window.Chart) return;
+        var cfg = cb.cfg;
+        if (!cfg.options) cfg.options = {};
+        cfg.options.responsive = true;
+        cfg.options.maintainAspectRatio = true;
+        if (!cfg.options.plugins) cfg.options.plugins = {};
+        if (!cfg.options.plugins.legend) cfg.options.plugins.legend = { position: 'top' };
+        var palette = ['#1565c0','#0891b2','#0d9488','#7c3aed','#db2777','#ea580c','#65a30d','#ca8a04'];
+        if (cfg.data && cfg.data.datasets) {
+          cfg.data.datasets.forEach(function(ds, di) {
+            if (!ds.backgroundColor) {
+              if (cfg.type === 'line') {
+                ds.backgroundColor = palette[di % palette.length] + '22';
+                ds.borderColor     = palette[di % palette.length];
+                ds.borderWidth     = 2;
+                ds.tension         = 0.3;
+                ds.pointRadius     = 3;
+              } else {
+                ds.backgroundColor = cfg.data.datasets.length === 1
+                  ? cfg.data.labels.map(function(_, li){ return palette[li % palette.length]; })
+                  : palette[di % palette.length];
+              }
+            }
+          });
+        }
+        try { new window.Chart(el, cfg); } catch(e) { console.warn('Chart.js:', e); }
+      });
+    }, 100);
+  }
+
+  return html;
+}
+
+// Esta última declaración es la versión activa del chat.
+async function sendChatMessage() {
   var input = document.getElementById('aiChatInput');
   if (!input) return;
   var msg = input.value.trim();
-  if (!msg) return;
+  if (!msg || window.aiChatBusy) return;
+
   input.value = '';
   addMessageToChat(msg, 'user');
-  try { addMessageToChat(answerLocalQuery(msg), 'ai'); }
-  catch (error) {
-    console.error('Error en consultor local', error);
-    addMessageToChat('No pude procesar la consulta. Revisa los filtros o escribe **ayuda**.', 'ai');
+
+  window.aiChatBusy = true;
+  input.disabled = true;
+  addMessageToChat('Gemini está analizando los datos y filtros actuales…', 'system', true);
+
+  try {
+    var history = (window.aiChatHistory || []).slice(-12);
+    var response = await fetch(getGeminiChatUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: msg,
+        context: getDynamicContextJSON(),
+        history: history
+      })
+    });
+
+    var payload = await response.json().catch(function(){ return {}; });
+    if (!response.ok) {
+      throw new Error(payload.error || ('Gemini respondió HTTP ' + response.status));
+    }
+
+    removeTypingIndicator();
+    // Renderizar el markdown completo de Gemini como HTML
+    var htmlText = renderGeminiMarkdown(payload.text);
+    addMessageToChat(htmlText, 'ai', false, true);
+    window.aiChatHistory.push({ role: 'user', content: msg });
+    window.aiChatHistory.push({ role: 'assistant', content: payload.text });
+  } catch (error) {
+    removeTypingIndicator();
+    console.error('Error consultando Gemini', error);
+    var errHtml = renderGeminiMarkdown('No pude consultar Gemini: **' + (error.message || 'error de conexión') + '**');
+    addMessageToChat(errHtml, 'ai', false, true);
+  } finally {
+    window.aiChatBusy = false;
+    input.disabled = false;
+    input.focus();
   }
 }
 
