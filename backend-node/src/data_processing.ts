@@ -5,32 +5,6 @@ import { downloadExcelSharepoint, getSharepointFileMeta, downloadViaGraphSharedL
 
 const CACHE_DIR = path.join(__dirname, '..', '.wa123_cache');
 const CACHE_LATEST = path.join(CACHE_DIR, 'data_latest.json');
-const PROJECT_DIR = path.resolve(__dirname, '..', '..');
-
-function getLocalAnalisisWalmartPath(): string {
-  const configuredPath = String(process.env.LOCAL_ANALISIS_WALMART_PATH || '').trim();
-  if (configuredPath) {
-    const resolved = path.resolve(configuredPath);
-    if (!fs.existsSync(resolved)) {
-      throw new Error(`No se encontró el Excel local configurado: ${resolved}`);
-    }
-    return resolved;
-  }
-
-  const candidates = fs.readdirSync(PROJECT_DIR)
-    .filter(name => !name.startsWith('~$') && /\.(xlsx|xlsm|xls)$/i.test(name))
-    .map(name => {
-      const fullPath = path.join(PROJECT_DIR, name);
-      return { fullPath, modified: fs.statSync(fullPath).mtimeMs };
-    })
-    .sort((a, b) => b.modified - a.modified);
-
-  if (candidates.length === 0) {
-    throw new Error('No se encontró ningún archivo Excel (.xlsx, .xls) en la raíz del proyecto para usar como base de datos local.');
-  }
-
-  return candidates[0].fullPath;
-}
 
 export function invalidateDashboardCache(): void {
   try {
@@ -170,18 +144,55 @@ export async function cargarNomina(): Promise<any> {
 
 export async function cargarDatos(cacheKey = "") {
   if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
-  const localPath = getLocalAnalisisWalmartPath();
-  const localStat = fs.statSync(localPath);
-  let sourceLastModified = localStat.mtime.toISOString();
-  if (!cacheKey) cacheKey = `local_${localStat.size}_${Math.trunc(localStat.mtimeMs)}`;
-
-  console.log(`Análisis Walmart local: ${localPath}`);
+  let sourceLastModified = "";
 
   const withSourceMeta = (data: any) => {
     if (sourceLastModified) data._source_last_modified = sourceLastModified;
     return data;
   };
 
+  // Ask SharePoint for the current file version before trusting a local cache.
+  // Previously data_latest.json was returned immediately, so it could remain
+  // stale forever even after Analisis Walmart.xlsx had changed.
+  if (!cacheKey) {
+    try {
+      const meta = await getSharepointFileMeta();
+      cacheKey = meta.cacheKey || "";
+      sourceLastModified = meta.lastModified || "";
+    } catch (e) {
+      console.warn("No se pudo validar la versión en SharePoint; se intentará usar el último caché local.", e);
+    }
+  }
+  
+  if (cacheKey) {
+    const p = path.join(CACHE_DIR, `data_${cacheKey}.json`);
+    if (fs.existsSync(p)) {
+      try {
+        const d = JSON.parse(fs.readFileSync(p, 'utf-8'));
+        if (d.resumen_diario) return withSourceMeta(d);
+      } catch (e) {}
+    }
+  }
+
+  if (fs.existsSync(CACHE_LATEST)) {
+    try {
+      const d = JSON.parse(fs.readFileSync(CACHE_LATEST, 'utf-8'));
+      if (d.resumen_diario && (!cacheKey || d._source_cache_key === cacheKey)) return withSourceMeta(d);
+    } catch (e) {}
+  }
+
+  // If SharePoint metadata was unavailable, allow the latest valid cache as a
+  // temporary fallback. Otherwise, only the cache matching the current remote
+  // version is accepted.
+  if (!cacheKey && fs.existsSync(CACHE_LATEST)) {
+    try {
+      const d = JSON.parse(fs.readFileSync(CACHE_LATEST, 'utf-8'));
+      if (d.resumen_diario) return withSourceMeta(d);
+    } catch (e) {}
+  }
+
+  const { localPath, cacheKey: downloadedCacheKey } = await downloadExcelSharepoint();
+  cacheKey = cacheKey || downloadedCacheKey;
 
   const dataCacheFile = path.join(CACHE_DIR, `data_${cacheKey}.json`);
   if (fs.existsSync(dataCacheFile)) {
@@ -614,12 +625,13 @@ export async function cargarDatos(cacheKey = "") {
     const appRows = XLSX.utils.sheet_to_json<any[]>(wsReporteGastosApp, { header: 1 });
     const normalizar = (value: any) => String(value || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
     const parseFechaGastoApp = (value: any) => {
-      // Las fechas numéricas ahora vienen en formato normal en Excel
+      // La app que alimenta esta hoja guarda las fechas numéricas con día/mes
+      // intercambiados (p. ej. 09/07 termina internamente como 07/09).
       if (typeof value === 'number') {
         const excelDate = new Date(Math.round((value - 25569) * 86400 * 1000));
         if (isNaN(excelDate.getTime())) return null;
-        const day = excelDate.getUTCDate();
-        const month = excelDate.getUTCMonth() + 1;
+        const day = excelDate.getUTCMonth() + 1;
+        const month = excelDate.getUTCDate();
         const year = excelDate.getUTCFullYear();
         const corrected = new Date(year, month - 1, day);
         if (corrected.getFullYear() === year && corrected.getMonth() === month - 1 && corrected.getDate() === day) return corrected;
