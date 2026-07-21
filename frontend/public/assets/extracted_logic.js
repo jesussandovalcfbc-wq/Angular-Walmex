@@ -5662,16 +5662,28 @@ function renderResumen(){
 
   window.bumpResumenRowspans = function(r1i, r2i){
     var r2Cell = document.querySelector('[data-r2-rowspan="'+r1i+'_'+r2i+'"]');
-    if(r2Cell) r2Cell.rowSpan = (parseInt(r2Cell.getAttribute('rowspan')||r2Cell.rowSpan,10)||0) + 1;
+    if(r2Cell) {
+       r2Cell.rowSpan = r2Cell.rowSpan + 1;
+       r2Cell.setAttribute('rowspan', r2Cell.rowSpan);
+    }
     var r1Cell = document.querySelector('[data-r1-rowspan="'+r1i+'"]');
-    if(r1Cell) r1Cell.rowSpan = (parseInt(r1Cell.getAttribute('rowspan')||r1Cell.rowSpan,10)||0) + 1;
+    if(r1Cell) {
+       r1Cell.rowSpan = r1Cell.rowSpan + 1;
+       r1Cell.setAttribute('rowspan', r1Cell.rowSpan);
+    }
   };
 
   window.decreaseResumenRowspans = function(r1i, r2i){
     var r2Cell = document.querySelector('[data-r2-rowspan="'+r1i+'_'+r2i+'"]');
-    if(r2Cell) r2Cell.rowSpan = Math.max(1, (parseInt(r2Cell.getAttribute('rowspan')||r2Cell.rowSpan,10)||1) - 1);
+    if(r2Cell) {
+       r2Cell.rowSpan = Math.max(1, r2Cell.rowSpan - 1);
+       r2Cell.setAttribute('rowspan', r2Cell.rowSpan);
+    }
     var r1Cell = document.querySelector('[data-r1-rowspan="'+r1i+'"]');
-    if(r1Cell) r1Cell.rowSpan = Math.max(1, (parseInt(r1Cell.getAttribute('rowspan')||r1Cell.rowSpan,10)||1) - 1);
+    if(r1Cell) {
+       r1Cell.rowSpan = Math.max(1, r1Cell.rowSpan - 1);
+       r1Cell.setAttribute('rowspan', r1Cell.rowSpan);
+    }
   };
 
   if(state.resumenMode === 'semanas'){
@@ -8230,3 +8242,122 @@ window.initWalmexJS = function(dashboardData, supabaseData, devolucionesData, su
 
     Promise.resolve(window.loadUIStateFromSupabase()).then(startApp, startApp);
 };
+
+window.exportResumenData = function() {
+  if (typeof XLSX === 'undefined') {
+    var script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    script.onload = function() { window.exportResumenData(); };
+    script.onerror = function() { alert('Error al cargar SheetJS.'); };
+    document.head.appendChild(script);
+    return;
+  }
+  var tbl = document.getElementById('tResumen');
+  if (!tbl) return;
+
+  var clone = tbl.cloneNode(true);
+
+  var origInputs = tbl.querySelectorAll('input');
+  var cloneInputs = clone.querySelectorAll('input');
+  for (var i = 0; i < origInputs.length; i++) {
+    var valNode = document.createTextNode(origInputs[i].value);
+    if(cloneInputs[i].parentNode) cloneInputs[i].parentNode.replaceChild(valNode, cloneInputs[i]);
+  }
+
+  var trash = clone.querySelectorAll('.trash-icon, button, svg, i');
+  for(var i=0; i<trash.length; i++) {
+    if(trash[i].parentNode) trash[i].parentNode.removeChild(trash[i]);
+  }
+
+  var html = clone.innerHTML;
+  html = html.replace(/<br\s*[\/]?>/gi, ' ');
+  // Agregamos un espacio antes de los divs para evitar que se pegue el texto con el número de semana
+  html = html.replace(/<div/gi, ' <div');
+  clone.innerHTML = html;
+
+  var rows = clone.querySelectorAll('tr');
+  var aoa = [];
+  var merges = [];
+  var maxCols = 0;
+
+  for (var r = 0; r < rows.length; r++) {
+    if (rows[r].style.display === 'none' || rows[r].classList.contains('hidden')) continue;
+    var cols = rows[r].querySelectorAll('th, td');
+    var cCount = cols.length;
+    if (cols[0] && cols[0].getAttribute('colspan')) {
+       cCount += (parseInt(cols[0].getAttribute('colspan')) - 1);
+    }
+    if (cCount > maxCols) maxCols = cCount;
+  }
+  
+  var storeStartRow = 0;
+  var productStartRow = 0;
+  var rOut = 0;
+
+  for (var r = 0; r < rows.length; r++) {
+    var tr = rows[r];
+    if (tr.style.display === 'none' || tr.classList.contains('hidden')) continue;
+
+    var cells = tr.querySelectorAll('th, td');
+    if (cells.length === 0) continue;
+
+    var cleanCells = [];
+    for (var c = 0; c < cells.length; c++) {
+       var text = cells[c].textContent || cells[c].innerText;
+       text = text.replace(/🗑️/g, '').replace(/✏️/g, '').replace(/×/g, '').replace(/\+/g, '').replace(/\-/g, '').trim();
+       text = text.replace(/\s+/g, ' '); 
+       var finalVal = text;
+       if (text !== '' && !text.includes('%') && !isNaN(Number(text.replace(/,/g, '')))) {
+          finalVal = Number(text.replace(/,/g, ''));
+       }
+       cleanCells.push(finalVal);
+    }
+
+    var aoaRow = [];
+    var isTotal = (cells[0] && cells[0].getAttribute('colspan') == '2');
+    var cCount = cells.length;
+    if (isTotal) cCount += 1;
+
+    var isHeader = (tr.parentNode && tr.parentNode.tagName.toLowerCase() === 'thead');
+    
+    if (isTotal) {
+       aoaRow.push(cleanCells[0]);
+       aoaRow.push("");
+       for (var i = 1; i < cleanCells.length; i++) aoaRow.push(cleanCells[i]);
+       merges.push({ s: { r: rOut, c: 0 }, e: { r: rOut, c: 1 } });
+    } else if (cCount === maxCols) {
+       aoaRow.push(cleanCells[0]); 
+       aoaRow.push(cleanCells[1]); 
+       for (var i = 2; i < cleanCells.length; i++) aoaRow.push(cleanCells[i]);
+    } else if (cCount === maxCols - 1) {
+       aoaRow.push("");
+       aoaRow.push(cleanCells[0]); 
+       for (var i = 1; i < cleanCells.length; i++) aoaRow.push(cleanCells[i]);
+    } else {
+       aoaRow.push("");
+       aoaRow.push("");
+       for (var i = 0; i < cleanCells.length; i++) aoaRow.push(cleanCells[i]);
+    }
+
+    aoa.push(aoaRow);
+    rOut++;
+  }
+
+  var wb = XLSX.utils.book_new();
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  if (merges.length > 0) ws['!merges'] = merges;
+  XLSX.utils.book_append_sheet(wb, ws, "Resumen");
+  XLSX.writeFile(wb, "Resumen_Walmart.xlsx");
+};
+window.toggleExcelDropdown = function(e) {
+  if (e) e.stopPropagation();
+  var menu = document.getElementById('excelDropdownMenu');
+  if (menu) menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+};
+document.addEventListener('click', function(e) {
+  var menu = document.getElementById('excelDropdownMenu');
+  var btn = document.getElementById('btnExportCapture');
+  if (menu && menu.style.display === 'block') {
+    if (btn && !btn.contains(e.target) && !menu.contains(e.target)) menu.style.display = 'none';
+  }
+});
