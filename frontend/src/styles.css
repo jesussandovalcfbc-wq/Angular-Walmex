@@ -1243,6 +1243,101 @@
     border-top:1px solid #b8c7d9;
     background:#fff;
   }
+  .resumen-main-box { position:relative; }
+  #programacionIaReasons {
+    position:absolute;
+    top:44px;
+    left:985px;
+    right:8px;
+    bottom:0;
+    width:auto;
+    min-width:0;
+    max-width:680px;
+    padding:4px 8px 18px 24px;
+    font-family:Verdana, Geneva, sans-serif;
+    color:#213547;
+  }
+  .programacion-ia-side-title {
+    margin:0 0 8px;
+    padding:0 0 6px;
+    border-bottom:1px solid #b8c7d9;
+    color:#075985;
+    font-size:13px;
+    font-weight:700;
+  }
+  .programacion-ia-card {
+    position:absolute;
+    left:24px;
+    right:8px;
+    margin:0;
+    padding:8px 10px;
+    border:1px solid #9ec9ed;
+    border-left:3px solid #2687c8;
+    background:linear-gradient(to bottom,#f8fcff 0%,#e8f4ff 100%);
+    box-shadow:0 1px 2px rgba(15,73,120,.08);
+  }
+  .programacion-ia-card::before {
+    content:'←';
+    position:absolute;
+    left:-22px;
+    top:9px;
+    color:#2687c8;
+    font-size:17px;
+    font-weight:700;
+  }
+  .programacion-ia-card-head {
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    margin-bottom:4px;
+    color:#0c4a6e;
+    font-size:11px;
+    font-weight:700;
+  }
+  .programacion-ia-card p {
+    margin:0;
+    color:#334155;
+    font-size:10px;
+    line-height:1.45;
+  }
+  .programacion-ia-decision {
+    margin:0 0 6px;
+    padding:4px 6px;
+    border-left:3px solid #0b6ea8;
+    background:#dcecf8;
+    color:#073b5c;
+    font-size:10px;
+    font-weight:700;
+    letter-spacing:.02em;
+  }
+  .programacion-ia-card ul {
+    margin:0;
+    padding:0 0 0 17px;
+    color:#334155;
+    font-size:10px;
+    line-height:1.38;
+  }
+  .programacion-ia-card li {
+    margin:0 0 3px;
+    padding-left:2px;
+  }
+  .programacion-ia-card li:last-child { margin-bottom:0; }
+  @media (max-width:1150px) {
+    #programacionIaReasons {
+      position:static;
+      width:965px;
+      max-width:965px;
+      min-width:965px;
+      padding:12px 8px 18px 24px;
+    }
+    .programacion-ia-card {
+      position:relative !important;
+      top:auto !important;
+      left:auto;
+      right:auto;
+      margin:0 0 9px;
+    }
+  }
   #tResumen {
     width:965px;
     min-width:965px;

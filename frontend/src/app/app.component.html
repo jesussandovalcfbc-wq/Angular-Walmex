@@ -395,6 +395,7 @@
 <tbody id="tResumenBody"></tbody>
 </table>
 </div>
+<aside aria-live="polite" id="programacionIaReasons" style="display:none;"></aside>
 </div>
 <aside aria-hidden="true" aria-labelledby="resumenAnalysisDialogTitle" aria-modal="true" class="resumen-analysis-panel" id="resumenAnalysisPanel" onclick="if(event.target===this) toggleResumenAnalisis(false)" role="dialog" style="display:none;">
 <div class="resumen-analysis-dialog">
@@ -458,23 +459,23 @@
   <span class="material-icons" style="font-size: 30px;">{{ isChatOpen ? 'close' : 'chat' }}</span>
 </button>
 
-<!-- Chat IA Box -->
-<div class="box ai-chat-box" [style.display]="isChatOpen ? 'flex' : 'none'" style="position:fixed; bottom:90px; right:20px; width:360px; height:500px !important; max-height:calc(100vh - 120px) !important; flex-direction:column; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.25); background:#fff; overflow:hidden; z-index:10000; transition: all 0.3s ease;">
+<!-- Gemini Chat Box -->
+<div class="box ai-chat-box" [style.display]="isChatOpen ? 'flex' : 'none'" style="position:fixed; bottom:90px; right:20px; width:min(760px, calc(100vw - 40px)); height:min(720px, calc(100vh - 120px)) !important; flex-direction:column; border-radius:12px; box-shadow:0 14px 40px rgba(0,0,0,0.28); background:#fff; overflow:hidden; z-index:10000; transition:all 0.3s ease;">
 <div class="box-hdr" style="display:flex; justify-content:space-between; align-items:center; background:linear-gradient(135deg, #1a3a5c, #0f2540); color:#fff; border-bottom:none; padding:12px 16px;">
 <div style="display:flex; align-items:center; gap:8px;">
-<span class="material-icons" style="font-size:20px; color:#60a5fa;">query_stats</span>
-<span style="font-size:1rem; font-weight:700;">Consultor de datos</span>
+<span class="material-icons" style="font-size:20px; color:#60a5fa;">auto_awesome</span>
+<span style="font-size:1rem; font-weight:700;">Gemini · Análisis Walmex</span>
 </div>
 </div>
-<div id="aiChatMessages" style="flex:1; padding:16px; overflow-y:auto; background:#f8fafc; display:flex; flex-direction:column; gap:12px; font-size:0.85rem;">
-<div style="display:flex; flex-direction:column; gap:4px; max-width:85%; align-self:flex-start;">
+<div id="aiChatMessages" style="flex:1; padding:20px; overflow-y:auto; background:#f8fafc; display:flex; flex-direction:column; gap:14px; font-size:0.9rem;">
+<div style="display:flex; flex-direction:column; gap:4px; max-width:88%; align-self:flex-start;">
 <div style="background:#e2e8f0; color:#334155; padding:10px 14px; border-radius:12px; border-top-left-radius:2px; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
-              Consulta la <strong>Tabla Resumen</strong> sin usar IA. Prueba: “¿Qué tienda vendió más?”, “Total de embarque” o “Productos con Sell Thru menor a 50%”.
+              Pregunta a <strong>Gemini</strong> sobre ventas POS, embarques, tendencias, semanas parciales, tiendas o productos. Analizará únicamente los datos y filtros visibles de la Tabla Resumen.
             </div>
 </div>
 </div>
 <div style="padding:12px; background:#fff; border-top:1px solid #e2e8f0; display:flex; gap:8px; align-items:center;">
-<input id="aiChatInput" onkeypress="if(event.key === 'Enter') sendChatMessage()" placeholder="Consulta ventas, embarque, merma o Sell Thru..." style="flex:1; padding:10px 16px; border:1px solid #cbd5e1; border-radius:20px; outline:none; font-size:0.85rem; background:#f1f5f9; color:#334155; transition:border-color 0.2s;" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#cbd5e1'" type="text"/>
+<input id="aiChatInput" onkeypress="if(event.key === 'Enter') sendChatMessage()" placeholder="Pregunta qué ocurrió, dónde cayó la venta o qué conviene revisar..." style="flex:1; padding:11px 16px; border:1px solid #cbd5e1; border-radius:20px; outline:none; font-size:0.9rem; background:#f1f5f9; color:#334155; transition:border-color 0.2s;" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#cbd5e1'" type="text"/>
 <button onclick="sendChatMessage()" style="background:#1565c0; color:#fff; border:none; width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; transition:background 0.2s, transform 0.1s;" onmouseover="this.style.background='#1e3a8a'" onmouseout="this.style.background='#1565c0'" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'">
 <span class="material-icons" style="font-size:18px;">send</span>
 </button>
