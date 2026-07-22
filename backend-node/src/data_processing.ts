@@ -625,13 +625,12 @@ export async function cargarDatos(cacheKey = "") {
     const appRows = XLSX.utils.sheet_to_json<any[]>(wsReporteGastosApp, { header: 1 });
     const normalizar = (value: any) => String(value || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
     const parseFechaGastoApp = (value: any) => {
-      // La app que alimenta esta hoja guarda las fechas numéricas con día/mes
-      // intercambiados (p. ej. 09/07 termina internamente como 07/09).
+      // Las fechas numéricas ahora vienen en formato normal en Excel
       if (typeof value === 'number') {
         const excelDate = new Date(Math.round((value - 25569) * 86400 * 1000));
         if (isNaN(excelDate.getTime())) return null;
-        const day = excelDate.getUTCMonth() + 1;
-        const month = excelDate.getUTCDate();
+        const day = excelDate.getUTCDate();
+        const month = excelDate.getUTCMonth() + 1;
         const year = excelDate.getUTCFullYear();
         const corrected = new Date(year, month - 1, day);
         if (corrected.getFullYear() === year && corrected.getMonth() === month - 1 && corrected.getDate() === day) return corrected;
