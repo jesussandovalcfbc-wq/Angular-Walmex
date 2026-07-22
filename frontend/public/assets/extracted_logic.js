@@ -20,8 +20,24 @@ try {
     if(localStorage.getItem('notesWalmart')) notesWalmart = JSON.parse(localStorage.getItem('notesWalmart'));
 } catch(e) {}
 
-var SUPABASE_UI_ROW_ID = 'choferes_ui_state';
+var DATABASE_UI_ROW_ID = 'choferes_ui_state';
 var UI_STATE_READY = false;
+
+function normalizeChoferesDate(value) {
+    var raw = String(value || '').trim();
+    if (!raw) return '';
+
+    // PostgreSQL/Neon serializes DATE and timestamp values as ISO timestamps.
+    // The saved Choferes state uses YYYY-MM-DD, so keep one canonical format
+    // for filters, row identifiers and labels without changing stored state.
+    var isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) return isoMatch[1] + '-' + isoMatch[2] + '-' + isoMatch[3];
+
+    var slashMatch = raw.match(/^(\d{4})\/(\d{2})\/(\d{2})/);
+    if (slashMatch) return slashMatch[1] + '-' + slashMatch[2] + '-' + slashMatch[3];
+
+    return raw.replace(/\//g, '-').split('T')[0];
+}
 
 window.saveChecks = function() {
     try {
@@ -35,12 +51,12 @@ window.saveChecks = function() {
     
     // Never overwrite the shared state before its current value has loaded.
     if (!UI_STATE_READY) {
-        console.warn('UI state is still loading; Supabase save was skipped.');
+        console.warn('UI state is still loading; Neon save was skipped.');
         return;
     }
 
-    // Sync to Supabase
-    if (_supabaseConfigured()) {
+    // Sync to Neon
+    if (_databaseConfigured()) {
         var payload = {
             checkedCFBC: [...checkedCFBC],
             checkedWalmart: [...checkedWalmart],
@@ -49,34 +65,34 @@ window.saveChecks = function() {
             notesCFBC: notesCFBC,
             notesWalmart: notesWalmart
         };
-        fetch(SUPABASE_URL + '/rest/v1/walmex_resumen_captura?on_conflict=id', {
+        fetch(DATABASE_URL + '/rest/v1/walmex_resumen_captura?on_conflict=id', {
             method: 'POST',
             headers: {
-                'apikey': SUPABASE_KEY,
-                'Authorization': 'Bearer ' + SUPABASE_KEY,
+                'apikey': DATABASE_KEY,
+                'Authorization': 'Bearer ' + DATABASE_KEY,
                 'Content-Type': 'application/json',
                 'Prefer': 'resolution=merge-duplicates,return=minimal'
             },
             body: JSON.stringify({
-                id: SUPABASE_UI_ROW_ID,
+                id: DATABASE_UI_ROW_ID,
                 data: payload,
                 updated_at: new Date().toISOString()
             })
-        }).catch(function(e) { console.error("Error saving UI state to Supabase", e); });
+        }).catch(function(e) { console.error("Error saving UI state to Neon", e); });
     }
 };
 
-window.loadUIStateFromSupabase = function() {
-    if (!_supabaseConfigured()) return Promise.resolve(false);
+window.loadUIStateFromNeon = function() {
+    if (!_databaseConfigured()) return Promise.resolve(false);
 
-    return fetch(SUPABASE_URL + '/rest/v1/walmex_resumen_captura?id=eq.' + encodeURIComponent(SUPABASE_UI_ROW_ID) + '&select=data', {
+    return fetch(DATABASE_URL + '/rest/v1/walmex_resumen_captura?id=eq.' + encodeURIComponent(DATABASE_UI_ROW_ID) + '&select=data', {
             headers: {
-                'apikey': SUPABASE_KEY,
-                'Authorization': 'Bearer ' + SUPABASE_KEY
+                'apikey': DATABASE_KEY,
+                'Authorization': 'Bearer ' + DATABASE_KEY
             }
         })
         .then(function(res) {
-            if (!res.ok) throw new Error('Supabase UI state request failed with status ' + res.status);
+            if (!res.ok) throw new Error('Neon UI state request failed with status ' + res.status);
             return res.json();
         })
         .then(function(rows) {
@@ -109,7 +125,7 @@ window.loadUIStateFromSupabase = function() {
         })
         .catch(function(e) {
             UI_STATE_READY = false;
-            console.error("Error loading UI state from Supabase", e);
+            console.error("Error loading UI state from Neon", e);
             return false;
         });
 };
@@ -206,7 +222,7 @@ window.saveNota = function(key, value, source) {
 };
 
 var DATA = null;
-var SUPABASE_DATA = null;
+var DATABASE_DATA = null;
 var DEVOLUCIONES_DATA = [];
 
 // ── Sub-tabs Choferes ──
@@ -269,18 +285,20 @@ function renderDevoluciones() {
         totalUnid  += cant;
         totalMonto += total;
         var fechaDisp = fechaRaw || 'N/A';
-        rows += '<tr style="border-bottom:1px solid #fee2e2;">' +
-            '<td style="padding:6px;">'+fechaDisp+'</td>' +
-            '<td style="padding:6px; font-weight:600;">'+( r.folio || '-')+'</td>' +
-            '<td style="padding:6px;">'+( r.serie || '-')+'</td>' +
-            '<td style="padding:6px;">'+( r.producto || '-')+'</td>' +
-            '<td style="padding:6px; text-align:right; color:#d97706; font-weight:700;">'+cant.toLocaleString('en-US')+'</td>' +
-            '<td style="padding:6px; text-align:right;">$'+precio.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>' +
-            '<td style="padding:6px; text-align:right; color:#dc2626; font-weight:700;">$'+total.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>' +
-            '<td style="padding:6px; text-align:center; font-style:italic;">'+(r.razon_devolucion || '-')+'</td>' +
+        var rowId = 'dev_row_' + totalCount;
+        rows += '<tr id="'+rowId+'" class="dev-row-red">' +
+            '<td>'+fechaDisp+'</td>' +
+            '<td>'+( r.folio || '-')+'</td>' +
+            '<td>'+( r.serie || '-')+'</td>' +
+            '<td>'+( r.producto || '-')+'</td>' +
+            '<td class="text-end">'+cant.toLocaleString('en-US')+'</td>' +
+            '<td class="text-end">$'+precio.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>' +
+            '<td class="text-end">$'+total.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>' +
+            '<td class="text-center fst-italic">'+(r.razon_devolucion || '-')+'</td>' +
+            '<td class="text-center"><div id="badge_'+rowId+'" class="dev-verify-badge" onclick="if(typeof window.toggleDevVerified===\'function\') window.toggleDevVerified(\''+rowId+'\')" style="display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:4px; font-size:11px; font-weight:600; cursor:pointer; background:#dc3545; color:#fff; border:none; transition:all 0.2s; user-select:none;"><i class="fa-solid fa-xmark"></i> No verificado</div></td>' +
             '</tr>';
     });
-    tbody.innerHTML = rows || '<tr><td colspan="8" style="text-align:center; padding:20px; color:#aaa;">Sin devoluciones en el rango seleccionado</td></tr>';
+    tbody.innerHTML = rows || '<tr><td colspan="9" style="text-align:center; padding:20px; color:#aaa;">Sin devoluciones en el rango seleccionado</td></tr>';
     var el; 
     el = document.getElementById('devTotalCount');   if(el) el.textContent = totalCount;
     el = document.getElementById('devTotalUnidades'); if(el) el.textContent = totalUnid.toLocaleString('en-US');
@@ -290,25 +308,25 @@ var state = { semana: null, semanas_sel: null, tienda: null, tiendas_sel: null, 
 var DIAS  = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
 var MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 
-// ====== SUPABASE (captura compartida "Programado") ======
+// ====== DATABASE (captura compartida "Programado") ======
 // Solo se usa la publishable_key (clave publica), nunca una clave secreta.
-var SUPABASE_URL = '__SUPABASE_URL__';
-var SUPABASE_KEY = '__SUPABASE_PUBLISHABLE_KEY__';
-var SUPABASE_CAPTURE_TABLE = 'walmex_resumen_captura_v2';
-var SUPABASE_CAPTURE_ROW_ID = 'captura_global';
+var DATABASE_URL = '__DATABASE_URL__';
+var DATABASE_KEY = '__DATABASE_PUBLISHABLE_KEY__';
+var DATABASE_CAPTURE_TABLE = 'walmex_resumen_captura_v2';
+var DATABASE_CAPTURE_ROW_ID = 'captura_global';
 
-function _supabaseHeaders(extra) {
+function _databaseHeaders(extra) {
   var h = {
-    'apikey': SUPABASE_KEY,
-    'Authorization': 'Bearer ' + SUPABASE_KEY,
+    'apikey': DATABASE_KEY,
+    'Authorization': 'Bearer ' + DATABASE_KEY,
     'Content-Type': 'application/json'
   };
   if (extra) { for (var k in extra) { h[k] = extra[k]; } }
   return h;
 }
 
-function _supabaseConfigured() {
-  return !!(SUPABASE_URL && SUPABASE_KEY && SUPABASE_URL.indexOf('http') === 0);
+function _databaseConfigured() {
+  return !!(DATABASE_URL && DATABASE_KEY && DATABASE_URL.indexOf('http') === 0);
 }
 
 
@@ -394,7 +412,7 @@ function syncChkTodas(){
 function init(){
   /* ── Restaurar capturas guardadas antes de cualquier render ── */
   /* Se dispara en paralelo (no bloquea el resto de init); cuando llegue la
-     respuesta de Supabase, si el usuario ya está en Resumen, se re-renderiza. */
+     respuesta de Neon, si el usuario ya está en Resumen, se re-renderiza. */
   _loadPersistedCapture();
   /* Refresco periódico de la captura compartida mientras se está en Resumen,
      para que los cambios guardados por otras personas aparezcan sin recargar. */
@@ -1021,11 +1039,11 @@ function renderChoferes() {
     var wmP = selWmProd ? selWmProd.value : 'ALL';
     
     var cfbcCount = 0;
-    if (SUPABASE_DATA && SUPABASE_DATA.length > 0) {
+    if (DATABASE_DATA && DATABASE_DATA.length > 0) {
         var cfbcRowsArr = [];
-        SUPABASE_DATA.forEach(function(row) {
-            var rowFecha = row.diario || row.fecha || '';
-            var normRowFecha = rowFecha.replace(/\//g, '-');
+        DATABASE_DATA.forEach(function(row) {
+            var rowFecha = normalizeChoferesDate(row.diario || row.fecha || '');
+            var normRowFecha = rowFecha;
             
             if (cfbcT !== 'ALL' && row.tienda !== cfbcT) return;
             if (cfbcP !== 'ALL' && row.producto !== cfbcP) return;
@@ -2138,7 +2156,7 @@ function roundUpToMultiple(qty, multiple){
 }
 
 /* Recomendación informativa para Programado.
-   No escribe en Capture SEM ni en Supabase: solamente calcula una referencia
+   No escribe en Capture SEM ni en Neon: solamente calcula una referencia
    auditable para que el usuario decida si la captura manualmente. */
 function buildProgramacionIaSuggestion(producto, tienda, selectedWeeks, dayGroups){
   var resumen = DATA.resumen_diario || {};
@@ -2850,14 +2868,14 @@ function _getSavedProgramadoRows(r1Key, r2Key) {
   });
 }
 
-/* ── Persistencia de capturas: Supabase (compartido entre todos los usuarios) ── */
+/* ── Persistencia de capturas: Neon (compartido entre todos los usuarios) ── */
 /* Antes vivía solo en localStorage (solo el navegador de cada persona la veía).
-   Ahora se guarda en una tabla de Supabase para que todos vean lo mismo.
+   Ahora se guarda en una tabla de Neon para que todos vean lo mismo.
    Se mantiene una copia en localStorage como respaldo/caché por si se pierde
-   la conexión, pero la fuente de verdad es Supabase. */
+   la conexión, pero la fuente de verdad es Neon. */
 var _CAPTURE_LS_KEY = 'walmex_cfbc_capture_v1';
 var _CAPTURE_REMOVED_DRAFTS_LS_KEY = 'walmex_removed_capture_drafts_v1';
-var _captureLoaded = false;     // true cuando ya llegó la primera respuesta de Supabase
+var _captureLoaded = false;     // true cuando ya llegó la primera respuesta de Neon
 var _capturePersistInFlight = null;
 
 function _readRemovedCaptureDrafts() {
@@ -2889,9 +2907,9 @@ function _unmarkCaptureDraftWeekRemoved(modeKey, sem) {
 }
 
 /* Las llaves internas usan un byte nulo ('\x00') para combinar producto+tienda
-   (ver _captureProjStoreKey). Postgres/Supabase NO acepta ese byte dentro de
+   (ver _captureProjStoreKey). Postgres/Neon NO acepta ese byte dentro de
    texto/JSON ("\u0000 cannot be converted to text"), así que antes de mandar
-   o recibir datos de Supabase lo intercambiamos por un símbolo seguro. */
+   o recibir datos de Neon lo intercambiamos por un símbolo seguro. */
 var _NULL_SEP = '\x00';
 var _SAFE_SEP = '\u241F'; // símbolo imprimible, no es un carácter de control
 
@@ -2910,16 +2928,16 @@ function _swapKeySeparators(obj, fromSep, toSep) {
   return obj;
 }
 
-function _captureForSupabase(data) {
+function _captureForNeon(data) {
   return _swapKeySeparators(data, _NULL_SEP, _SAFE_SEP);
 }
 
-function _captureFromSupabase(data) {
+function _captureFromNeon(data) {
   return _swapKeySeparators(data, _SAFE_SEP, _NULL_SEP);
 }
 
 /* Llaves (producto\x00tienda) borradas localmente desde el último _persistCapture
-   exitoso. Se usan para que el merge contra Supabase respete las eliminaciones
+   exitoso. Se usan para que el merge contra Neon respete las eliminaciones
    en vez de "revivirlas" porque seguían existiendo del lado remoto. */
 window._captureRemovedKeys = window._captureRemovedKeys || { sem: {}, norm: {} };
 
@@ -2929,7 +2947,7 @@ function _markCaptureKeyRemoved(modeKey, sk) {
   window._captureRemovedKeys[modeKey][sk] = true;
 }
 
-/* Combina lo que ya estaba guardado en Supabase con los cambios hechos en este
+/* Combina lo que ya estaba guardado en Neon con los cambios hechos en este
    navegador, en vez de reemplazar el registro completo. Por cada llave
    (producto+tienda) se usa la versión local si existe (es el cambio más
    reciente de esta sesión); si una llave solo existe en remoto, se conserva
@@ -2973,24 +2991,24 @@ function _persistCapture() {
   // En v2 los Programados confirmados se guardan fila por fila.
 }
 
-function _saveRowToSupabase(mode, prod, tienda, sem, vals) {
-  if (!_supabaseConfigured()) return;
+function _saveRowToNeon(mode, prod, tienda, sem, vals) {
+  if (!_databaseConfigured()) return;
   var payload = { mode: mode, producto: prod, tienda: tienda, semana: sem, valores: vals };
-  fetch(SUPABASE_URL + '/rest/v1/' + SUPABASE_CAPTURE_TABLE + '?on_conflict=mode,producto,tienda,semana', {
+  fetch(DATABASE_URL + '/rest/v1/' + DATABASE_CAPTURE_TABLE + '?on_conflict=mode,producto,tienda,semana', {
     method: 'POST',
-    headers: _supabaseHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+    headers: _databaseHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
     body: JSON.stringify(payload)
   }).catch(function(e){ console.error(e); });
 }
 
-function _deleteRowFromSupabase(mode, prod, tienda, sem) {
-  if (!_supabaseConfigured()) return;
-  var url = SUPABASE_URL + '/rest/v1/' + SUPABASE_CAPTURE_TABLE
+function _deleteRowFromNeon(mode, prod, tienda, sem) {
+  if (!_databaseConfigured()) return;
+  var url = DATABASE_URL + '/rest/v1/' + DATABASE_CAPTURE_TABLE
     + '?mode=eq.' + encodeURIComponent(mode)
     + '&producto=eq.' + encodeURIComponent(prod)
     + '&tienda=eq.' + encodeURIComponent(tienda)
     + '&semana=eq.' + encodeURIComponent(sem);
-  fetch(url, { method: 'DELETE', headers: _supabaseHeaders() }).catch(function(e){ console.error(e); });
+  fetch(url, { method: 'DELETE', headers: _databaseHeaders() }).catch(function(e){ console.error(e); });
 }
 
 function _persistCaptureLegacy() {
@@ -2999,8 +3017,8 @@ function _persistCaptureLegacy() {
     // Respaldo local inmediato (no bloqueante) — localStorage sí acepta el byte nulo
     try { localStorage.setItem(_CAPTURE_LS_KEY, JSON.stringify(window._captureProjections)); } catch (e) {}
 
-    if (!_supabaseConfigured()) {
-      console.warn('Supabase no está configurado (falta url o publishable_key) — solo se guardó local.');
+    if (!_databaseConfigured()) {
+      console.warn('Neon no está configurado (falta url o publishable_key) — solo se guardó local.');
       _showCaptureSaveError('No hay conexión con la base de datos compartida — esta captura solo quedó guardada en este navegador.');
       return;
     }
@@ -3009,17 +3027,17 @@ function _persistCaptureLegacy() {
     var removedKeys = window._captureRemovedKeys || { sem: {}, norm: {} };
     window._captureRemovedKeys = { sem: {}, norm: {} }; // se consumen en este guardado
 
-    // 1) Traer SIEMPRE la versión más reciente de Supabase antes de escribir,
+    // 1) Traer SIEMPRE la versión más reciente de Neon antes de escribir,
     //    para no pisar capturas guardadas por otra persona (o por esta misma
     //    sesión un instante antes, mientras la carga inicial aún no terminaba).
-    var readUrl = SUPABASE_URL + '/rest/v1/' + SUPABASE_CAPTURE_TABLE
-      + '?id=eq.' + encodeURIComponent(SUPABASE_CAPTURE_ROW_ID) + '&select=data';
+    var readUrl = DATABASE_URL + '/rest/v1/' + DATABASE_CAPTURE_TABLE
+      + '?id=eq.' + encodeURIComponent(DATABASE_CAPTURE_ROW_ID) + '&select=data';
 
-    fetch(readUrl, { headers: _supabaseHeaders() })
+    fetch(readUrl, { headers: _databaseHeaders() })
       .then(function (resp) { return resp.ok ? resp.json() : []; })
       .then(function (rows) {
         var remoteRaw = (rows && rows[0] && rows[0].data) ? rows[0].data : null;
-        var remote = remoteRaw ? _captureFromSupabase(remoteRaw) : null;
+        var remote = remoteRaw ? _captureFromNeon(remoteRaw) : null;
         var merged = _mergeCaptureStores(remote, localSnapshot, removedKeys);
 
         // Reflejar el resultado combinado localmente, para que la sesión
@@ -3028,39 +3046,39 @@ function _persistCaptureLegacy() {
         try { localStorage.setItem(_CAPTURE_LS_KEY, JSON.stringify(merged)); } catch (e) {}
 
         var payload = JSON.stringify({
-          id: SUPABASE_CAPTURE_ROW_ID,
-          data: _captureForSupabase(merged),
+          id: DATABASE_CAPTURE_ROW_ID,
+          data: _captureForNeon(merged),
           updated_at: new Date().toISOString()
         });
         // Upsert: si la fila ya existe (mismo id), la actualiza; si no, la crea.
-        return fetch(SUPABASE_URL + '/rest/v1/' + SUPABASE_CAPTURE_TABLE + '?on_conflict=id', {
+        return fetch(DATABASE_URL + '/rest/v1/' + DATABASE_CAPTURE_TABLE + '?on_conflict=id', {
           method: 'POST',
-          headers: _supabaseHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+          headers: _databaseHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
           body: payload
         });
       })
       .then(function (resp) {
         if (resp && !resp.ok) {
           return resp.text().then(function (txt) {
-            console.error('Supabase rechazó el guardado de la captura. Status ' + resp.status + ': ' + txt);
-            _showCaptureSaveError('No se pudo guardar en la base de datos compartida (código ' + resp.status + '). Revisa permisos/RLS en Supabase.');
+            console.error('Neon rechazó el guardado de la captura. Status ' + resp.status + ': ' + txt);
+            _showCaptureSaveError('No se pudo guardar en la base de datos compartida (código ' + resp.status + '). Revisa permisos/RLS en Neon.');
           });
         }
       })
       .catch(function (err) {
-        console.warn('No se pudo guardar la captura en Supabase (se guardó local como respaldo):', err);
+        console.warn('No se pudo guardar la captura en Neon (se guardó local como respaldo):', err);
         _showCaptureSaveError('No se pudo conectar con la base de datos compartida. Esta captura solo quedó en este navegador.');
       });
   } catch (e) {}
 }
 
 function _loadPersistedCapture() {
-  if (!_supabaseConfigured()) {
+  if (!_databaseConfigured()) {
     _captureLoaded = true;
     return Promise.resolve();
   }
-  var url = SUPABASE_URL + '/rest/v1/' + SUPABASE_CAPTURE_TABLE + '?select=*';
-  return fetch(url, { headers: _supabaseHeaders() })
+  var url = DATABASE_URL + '/rest/v1/' + DATABASE_CAPTURE_TABLE + '?select=*';
+  return fetch(url, { headers: _databaseHeaders() })
     .then(function(resp) {
       if (!resp.ok) return [];
       return resp.json();
@@ -3106,21 +3124,21 @@ function _loadPersistedCaptureLegacy() {
     }
   } catch (e) {}
 
-  if (!_supabaseConfigured()) {
+  if (!_databaseConfigured()) {
     _captureLoaded = true;
     return Promise.resolve();
   }
 
-  // 2) Traer la versión compartida de Supabase (la fuente de verdad)
-  var url = SUPABASE_URL + '/rest/v1/' + SUPABASE_CAPTURE_TABLE
-    + '?id=eq.' + encodeURIComponent(SUPABASE_CAPTURE_ROW_ID)
+  // 2) Traer la versión compartida de Neon (la fuente de verdad)
+  var url = DATABASE_URL + '/rest/v1/' + DATABASE_CAPTURE_TABLE
+    + '?id=eq.' + encodeURIComponent(DATABASE_CAPTURE_ROW_ID)
     + '&select=data';
 
-  return fetch(url, { headers: _supabaseHeaders() })
+  return fetch(url, { headers: _databaseHeaders() })
     .then(function (resp) {
       if (!resp.ok) {
         return resp.text().then(function (txt) {
-          console.error('Supabase rechazó la lectura de la captura. Status ' + resp.status + ': ' + txt);
+          console.error('Neon rechazó la lectura de la captura. Status ' + resp.status + ': ' + txt);
           return [];
         });
       }
@@ -3128,7 +3146,7 @@ function _loadPersistedCaptureLegacy() {
     })
     .then(function (rows) {
       var remoteRaw = (rows && rows[0] && rows[0].data) ? rows[0].data : null;
-      var remote = remoteRaw ? _captureFromSupabase(remoteRaw) : null;
+      var remote = remoteRaw ? _captureFromNeon(remoteRaw) : null;
       if (remote && typeof remote === 'object') {
         ['sem', 'norm'].forEach(function (modeKey) {
           var store = remote[modeKey];
@@ -3157,7 +3175,7 @@ function _loadPersistedCaptureLegacy() {
       }
     })
     .catch(function (err) {
-      console.warn('No se pudo leer la captura compartida de Supabase, usando respaldo local:', err);
+      console.warn('No se pudo leer la captura compartida de Neon, usando respaldo local:', err);
       if (!window._captureProjections) window._captureProjections = { sem: {}, norm: {}, _meta: {} };
     })
     .finally(function () {
@@ -3178,12 +3196,12 @@ function _clearPersistedCapture() {
   var tbody = document.getElementById('tResumenBody');
   if (tbody) tbody.innerHTML = '';
 
-  if (_supabaseConfigured()) {
-    fetch(SUPABASE_URL + '/rest/v1/' + SUPABASE_CAPTURE_TABLE + '?id=gt.0', {
+  if (_databaseConfigured()) {
+    fetch(DATABASE_URL + '/rest/v1/' + DATABASE_CAPTURE_TABLE + '?id=gt.0', {
       method: 'DELETE',
-      headers: _supabaseHeaders()
+      headers: _databaseHeaders()
     }).catch(function(err) {
-      console.warn('No se pudo borrar la captura en Supabase:', err);
+      console.warn('No se pudo borrar la captura en Neon:', err);
     });
   }
 }
@@ -3197,14 +3215,14 @@ function _clearPersistedCaptureLegacy() {
   var tbody = document.getElementById('tResumenBody');
   if (tbody) tbody.innerHTML = '';
 
-  if (_supabaseConfigured()) {
-    fetch(SUPABASE_URL + '/rest/v1/' + SUPABASE_CAPTURE_TABLE
-      + '?id=eq.' + encodeURIComponent(SUPABASE_CAPTURE_ROW_ID), {
+  if (_databaseConfigured()) {
+    fetch(DATABASE_URL + '/rest/v1/' + DATABASE_CAPTURE_TABLE
+      + '?id=eq.' + encodeURIComponent(DATABASE_CAPTURE_ROW_ID), {
       method: 'PATCH',
-      headers: _supabaseHeaders({ 'Prefer': 'return=minimal' }),
+      headers: _databaseHeaders({ 'Prefer': 'return=minimal' }),
       body: JSON.stringify({ data: { sem: {}, norm: {}, _meta: {} }, updated_at: new Date().toISOString() })
     }).catch(function (err) {
-      console.warn('No se pudo borrar la captura compartida en Supabase:', err);
+      console.warn('No se pudo borrar la captura compartida en Neon:', err);
     });
   }
 }
@@ -3237,20 +3255,20 @@ function _clearWeekFromCapture(targetSem) {
   window._skipCaptureSaveOnce = true;
   if (typeof renderResumen === 'function') renderResumen();
 
-  if (!_supabaseConfigured()) return;
-  var url = SUPABASE_URL + '/rest/v1/' + SUPABASE_CAPTURE_TABLE
+  if (!_databaseConfigured()) return;
+  var url = DATABASE_URL + '/rest/v1/' + DATABASE_CAPTURE_TABLE
     + '?semana=eq.' + encodeURIComponent(String(targetSem).trim());
-  fetch(url, { method: 'DELETE', headers: _supabaseHeaders() })
+  fetch(url, { method: 'DELETE', headers: _databaseHeaders() })
     .then(function(res) {
       if (!res.ok) {
-        console.warn('Supabase DELETE failed:', res.status, res.statusText);
-        alert('Error al borrar en Supabase (Código ' + res.status + '). Puede que falten permisos (RLS) para DELETE.');
+        console.warn('Neon DELETE failed:', res.status, res.statusText);
+        alert('Error al borrar en Neon (Código ' + res.status + '). Puede que falten permisos (RLS) para DELETE.');
       } else {
-        console.log('Semana ' + targetSem + ' borrada de Supabase.');
+        console.log('Semana ' + targetSem + ' borrada de Neon.');
       }
     })
     .catch(function(err) {
-      console.warn('Error de red al borrar la semana en Supabase:', err);
+      console.warn('Error de red al borrar la semana en Neon:', err);
     });
 }
 
@@ -3262,17 +3280,17 @@ function _clearWeekFromCaptureLegacy(targetSem) {
   window._skipCaptureSaveOnce = true;
   if (typeof renderResumen === 'function') renderResumen();
 
-  if (!_supabaseConfigured()) return;
+  if (!_databaseConfigured()) return;
 
-  // 2) Leer Supabase → filtrar semana → escribir de vuelta (mismo patrón que _persistCapture)
-  var readUrl = SUPABASE_URL + '/rest/v1/' + SUPABASE_CAPTURE_TABLE
-    + '?id=eq.' + encodeURIComponent(SUPABASE_CAPTURE_ROW_ID) + '&select=data';
+  // 2) Leer Neon → filtrar semana → escribir de vuelta (mismo patrón que _persistCapture)
+  var readUrl = DATABASE_URL + '/rest/v1/' + DATABASE_CAPTURE_TABLE
+    + '?id=eq.' + encodeURIComponent(DATABASE_CAPTURE_ROW_ID) + '&select=data';
 
-  fetch(readUrl, { headers: _supabaseHeaders() })
+  fetch(readUrl, { headers: _databaseHeaders() })
     .then(function(resp) { return resp.ok ? resp.json() : []; })
     .then(function(rows) {
       var remoteRaw = (rows && rows[0] && rows[0].data) ? rows[0].data : null;
-      var remote = remoteRaw ? _captureFromSupabase(remoteRaw) : { sem: {}, norm: {}, _meta: {} };
+      var remote = remoteRaw ? _captureFromNeon(remoteRaw) : { sem: {}, norm: {}, _meta: {} };
       // Filtrar la semana del remoto también
       _filterWeekFromStore(remote, targetSem);
       // Sincronizar local con el remoto filtrado (por si había datos de otros usuarios)
@@ -3280,13 +3298,13 @@ function _clearWeekFromCaptureLegacy(targetSem) {
       try { localStorage.setItem(_CAPTURE_LS_KEY, JSON.stringify(remote)); } catch(e) {}
       window._skipCaptureSaveOnce = true;
       if (typeof renderResumen === 'function') renderResumen();
-      // Escribir de vuelta a Supabase con los separadores correctos
-      return fetch(SUPABASE_URL + '/rest/v1/' + SUPABASE_CAPTURE_TABLE + '?on_conflict=id', {
+      // Escribir de vuelta a Neon con los separadores correctos
+      return fetch(DATABASE_URL + '/rest/v1/' + DATABASE_CAPTURE_TABLE + '?on_conflict=id', {
         method: 'POST',
-        headers: _supabaseHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+        headers: _databaseHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
         body: JSON.stringify({
-          id: SUPABASE_CAPTURE_ROW_ID,
-          data: _captureForSupabase(remote),
+          id: DATABASE_CAPTURE_ROW_ID,
+          data: _captureForNeon(remote),
           updated_at: new Date().toISOString()
         })
       });
@@ -3294,12 +3312,12 @@ function _clearWeekFromCaptureLegacy(targetSem) {
     .then(function(resp) {
       if (resp && !resp.ok) {
         resp.text().then(function(txt) {
-          console.error('Error al borrar semana en Supabase:', resp.status, txt);
+          console.error('Error al borrar semana en Neon:', resp.status, txt);
         });
       }
     })
     .catch(function(err) {
-      console.warn('No se pudo borrar la semana en Supabase:', err);
+      console.warn('No se pudo borrar la semana en Neon:', err);
     });
 }
 
@@ -3444,7 +3462,7 @@ function _guardarCaptura(r1i, r2i, rowIndex) {
     window._captureVisibleInitial = window._captureVisibleInitial - 1;
   }
   
-  _saveRowToSupabase(modeKey, block.prod, block.tienda, semVal, values);
+  _saveRowToNeon(modeKey, block.prod, block.tienda, semVal, values);
   window._skipCaptureSaveOnce = true;
   if(typeof renderResumen === 'function') renderResumen();
   /* Feedback visual */
@@ -3491,7 +3509,7 @@ function saveAllCaptureRows() {
           return;
         }
         savedRows.push({ sem: semVal, values: (row.values || []).slice(), hidden: false, saved: true });
-        _saveRowToSupabase(modeKey, block.prod, block.tienda, semVal, (row.values || []).slice());
+        _saveRowToNeon(modeKey, block.prod, block.tienda, semVal, (row.values || []).slice());
         savedBySem[semVal] = true;
         savedCount++;
         return;
@@ -3553,7 +3571,7 @@ function _editProgramadoRow(r1Key, r2Key, rowIdx, colIdx, modeKey, semVal) {
     return;
   }
   try { localStorage.setItem(_CAPTURE_LS_KEY, JSON.stringify(window._captureProjections)); } catch(e) {}
-  _saveRowToSupabase(modeKey, prod, tienda, row.sem, row.values);
+  _saveRowToNeon(modeKey, prod, tienda, row.sem, row.values);
   if(typeof renderResumen === 'function') renderResumen();
 }
 
@@ -3585,7 +3603,7 @@ function _deleteProgramadoRow(r1Key, r2Key, rowIdx, modeKey, semVal) {
     delete store[sk];
     _markCaptureKeyRemoved(modeKey, sk);
   }
-  if(deletedRow) _deleteRowFromSupabase(modeKey, prod, tienda, deletedRow.sem);
+  if(deletedRow) _deleteRowFromNeon(modeKey, prod, tienda, deletedRow.sem);
   if(typeof renderResumen === 'function') renderResumen();
 }
 
@@ -4173,7 +4191,7 @@ function _ensureNextSemanaProyeccion() {
 }
 
 /* Analisis de variacion POS. Es estrictamente de lectura: usa los datos ya
-   cargados en DATA.resumen_diario y nunca guarda estado en Supabase. */
+   cargados en DATA.resumen_diario y nunca guarda estado en Neon. */
 function _resumenAnalysisStatus(previous, current){
   var delta = current - previous;
   if(previous === 0 && current === 0) return {key:'stable', label:'Sin ventas'};
@@ -6203,7 +6221,7 @@ function renderResumen(){
           pRow += '<td data-group="'+id1+'" style="position:static;background:'+progBg+';padding:3px 6px;white-space:nowrap;'+
             'font-size:15px;font-weight:600;color:#e65100;border-right:1px solid #e0e6f0;text-align:left">Programado '+
             '<span style="font-size:13px;font-weight:bold;color:#333;background:#ffe082;border-radius:3px;padding:1px 5px">'+(progRow.sem || '')+'</span>'+
-            '<button type="button" onclick="_deleteProgramadoRow(\''+r1Key+'\',\''+r2Key+'\','+progIdx+',\'sem\',\''+(progRow.sem || '')+'\')" style="margin-left:6px;font-size:11px;background:transparent;border:none;cursor:pointer;color:#c62828">🗑️</button>'+
+            '<button type="button" onclick="_deleteProgramadoRow(\''+r1Key+'\',\''+r2Key+'\','+progIdx+',\'sem\',\''+(progRow.sem || '')+'\')" style="margin-left:6px;font-size:11px;background:transparent;border:none;cursor:pointer;color:#c62828"><i class="fa-solid fa-trash" style="color: #9ca3af; font-size: 11px;"></i></button>'+
             '</td>';
 
           dayGroups.forEach(function(group, gi){
@@ -6211,7 +6229,7 @@ function renderResumen(){
             var fv = v !== '' ? fmt(parseFloat(v)||0) : '';
             pRow += '<td data-group="'+id1+'" style="font-size:14px;color:#e65100;background:'+progBg+';text-align:right;width:68px;min-width:68px;max-width:68px;padding:3px 8px;vertical-align:middle">'+
               (fv||'') +
-              '<button type="button" onclick="_editProgramadoRow(\''+r1Key+'\',\''+r2Key+'\','+progIdx+','+gi+',\'sem\',\''+(progRow.sem || '')+'\')" style="margin-left:2px;font-size:10px;background:transparent;border:none;cursor:pointer;color:#1565c0">✏️</button>' +
+              '<button type="button" onclick="_editProgramadoRow(\''+r1Key+'\',\''+r2Key+'\','+progIdx+','+gi+',\'sem\',\''+(progRow.sem || '')+'\')" style="margin-left:2px;font-size:10px;background:transparent;border:none;cursor:pointer;color:#1565c0"><i class="fa-solid fa-pencil" style="color:#e67e22;"></i></button>' +
               '</td>';
           });
 
@@ -6845,7 +6863,7 @@ function renderResumen(){
         pRow += '<td data-group="'+id1+'" style="position:static;background:'+progBg+';padding:3px 6px;white-space:nowrap;'+
           'font-size:15px;font-weight:600;color:#e65100;border-right:1px solid #e0e6f0;text-align:left">Programado '+
           '<span style="font-size:13px;font-weight:bold;color:#333;background:#ffe082;border-radius:3px;padding:1px 5px">'+(progRow.sem || '')+'</span>'+
-          '<button type="button" onclick="_deleteProgramadoRow(\''+r1Key+'\',\''+r2Key+'\','+progIdx+',\'norm\',\''+(progRow.sem || '')+'\')" style="margin-left:6px;font-size:11px;background:transparent;border:none;cursor:pointer;color:#c62828">🗑️</button>'+
+          '<button type="button" onclick="_deleteProgramadoRow(\''+r1Key+'\',\''+r2Key+'\','+progIdx+',\'norm\',\''+(progRow.sem || '')+'\')" style="margin-left:6px;font-size:11px;background:transparent;border:none;cursor:pointer;color:#c62828"><i class="fa-solid fa-trash" style="color: #9ca3af; font-size: 11px;"></i></button>'+
           '</td>';
 
         pivot.columns.forEach(function(col, ci){
@@ -6853,7 +6871,7 @@ function renderResumen(){
           var fv = v !== '' ? fmt(parseFloat(v)||0) : '';
           pRow += '<td data-group="'+id1+'" style="font-size:14px;color:#e65100;background:'+progBg+';text-align:right;vertical-align:middle;width:68px;min-width:68px;max-width:68px;padding:3px 8px">'+
             (fv||'') +
-            '<button type="button" onclick="_editProgramadoRow(\''+r1Key+'\',\''+r2Key+'\','+progIdx+','+ci+',\'norm\',\''+(progRow.sem || '')+'\')" style="margin-left:2px;font-size:10px;background:transparent;border:none;cursor:pointer;color:#1565c0">✏️</button>' +
+            '<button type="button" onclick="_editProgramadoRow(\''+r1Key+'\',\''+r2Key+'\','+progIdx+','+ci+',\'norm\',\''+(progRow.sem || '')+'\')" style="margin-left:2px;font-size:10px;background:transparent;border:none;cursor:pointer;color:#1565c0"><i class="fa-solid fa-pencil" style="color:#e67e22;"></i></button>' +
             '</td>';
         });
 
@@ -8213,12 +8231,12 @@ function closeImageViewer() {
     document.getElementById('imgViewerModal').style.display = 'none';
 }
 
-window.initWalmexJS = function(dashboardData, supabaseData, devolucionesData, supaUrl, supaKey) {
+window.initWalmexJS = function(dashboardData, databaseData, devolucionesData, databaseApiUrl, databaseClientKey) {
     DATA = dashboardData;
-    SUPABASE_DATA = supabaseData;
+    DATABASE_DATA = databaseData;
     DEVOLUCIONES_DATA = devolucionesData;
-    SUPABASE_URL = supaUrl;
-    SUPABASE_KEY = supaKey;
+    DATABASE_URL = databaseApiUrl;
+    DATABASE_KEY = databaseClientKey;
     
     var loader = document.getElementById('loader');
     var loaderTxt = loader ? loader.querySelector('.ld-txt') : null;
@@ -8240,7 +8258,100 @@ window.initWalmexJS = function(dashboardData, supabaseData, devolucionesData, su
         if (app) app.style.display = 'block';
     };
 
-    Promise.resolve(window.loadUIStateFromSupabase()).then(startApp, startApp);
+    Promise.resolve(window.loadUIStateFromNeon()).then(startApp, startApp);
+};
+
+window.toggleDevVerified = function(rowId, forceState) {
+    var tr = document.getElementById(rowId);
+    var badge = document.getElementById('badge_' + rowId);
+    if (!tr || !badge) return;
+    
+    var isVerified = badge.getAttribute('data-verified') === 'true';
+    var targetState = (typeof forceState !== 'undefined') ? forceState : !isVerified;
+    
+    if (targetState) {
+        badge.setAttribute('data-verified', 'true');
+        badge.innerHTML = '<i class="fa-solid fa-check"></i> Verificado';
+        badge.style.background = '#198754';
+        badge.style.color = '#fff';
+        badge.style.border = 'none';
+        tr.classList.remove('dev-row-red');
+        tr.classList.add('dev-row-green');
+    } else {
+        badge.setAttribute('data-verified', 'false');
+        badge.innerHTML = '<i class="fa-solid fa-xmark"></i> No verificado';
+        badge.style.background = '#dc3545';
+        badge.style.color = '#fff';
+        badge.style.border = 'none';
+        tr.classList.remove('dev-row-green');
+        tr.classList.add('dev-row-red');
+    }
+};
+
+window.verifyAllDevoluciones = function() {
+    var badges = document.querySelectorAll('.dev-verify-badge');
+    var count = 0;
+    badges.forEach(function(b) {
+        if (b.getAttribute('data-verified') !== 'true') {
+            var rowId = b.id.replace('badge_', '');
+            window.toggleDevVerified(rowId, true);
+            count++;
+        }
+    });
+};
+
+window.exportDevolucionesData = function() {
+  if (typeof XLSX === 'undefined') {
+    var script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    script.onload = function() { window.exportDevolucionesData(); };
+    script.onerror = function() { alert('Error al cargar SheetJS.'); };
+    document.head.appendChild(script);
+    return;
+  }
+  var tbl = document.getElementById('devolucionesTable');
+  if (!tbl) return;
+
+  var clone = tbl.cloneNode(true);
+  
+  // Remove the verification checkboxes column and any inputs inside
+  var rows = clone.querySelectorAll('tr');
+  for (var i = 0; i < rows.length; i++) {
+     if (rows[i].children.length > 0) {
+        rows[i].removeChild(rows[i].lastElementChild); // Remove "Verificado" th/td
+     }
+  }
+
+  var html = clone.innerHTML;
+  html = html.replace(/<br\s*[\/]?>/gi, ' ');
+  clone.innerHTML = html;
+
+  var aoa = [];
+  rows = clone.querySelectorAll('tr');
+  for (var r = 0; r < rows.length; r++) {
+    if (rows[r].style.display === 'none' || rows[r].classList.contains('hidden')) continue;
+    var cols = rows[r].querySelectorAll('th, td');
+    var rowData = [];
+    for (var c = 0; c < cols.length; c++) {
+      var text = cols[c].textContent || cols[c].innerText;
+      text = text.replace(/\s+/g, ' ').trim();
+      var finalVal = text;
+      // Convert to number if applicable, ignoring $ and ,
+      var numText = text.replace(/[$,]/g, '');
+      if (text !== '' && !isNaN(Number(numText))) {
+         finalVal = Number(numText);
+      }
+      rowData.push(finalVal);
+    }
+    if(rowData.length > 0) {
+       aoa.push(rowData);
+    }
+  }
+
+  var wb = XLSX.utils.book_new();
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  XLSX.utils.book_append_sheet(wb, ws, "Devoluciones");
+  XLSX.writeFile(wb, "Devoluciones_Walmart.xlsx");
 };
 
 window.exportResumenData = function() {
@@ -8354,10 +8465,23 @@ window.toggleExcelDropdown = function(e) {
   var menu = document.getElementById('excelDropdownMenu');
   if (menu) menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
 };
+
+window.toggleExcelDropdownDev = function(e) {
+  if (e) e.stopPropagation();
+  var menu = document.getElementById('excelDropdownMenuDev');
+  if (menu) menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+};
+
 document.addEventListener('click', function(e) {
   var menu = document.getElementById('excelDropdownMenu');
   var btn = document.getElementById('btnExportCapture');
   if (menu && menu.style.display === 'block') {
     if (btn && !btn.contains(e.target) && !menu.contains(e.target)) menu.style.display = 'none';
+  }
+  
+  var menuDev = document.getElementById('excelDropdownMenuDev');
+  var btnDev = document.getElementById('btnExportDev');
+  if (menuDev && menuDev.style.display === 'block') {
+    if (btnDev && !btnDev.contains(e.target) && !menuDev.contains(e.target)) menuDev.style.display = 'none';
   }
 });

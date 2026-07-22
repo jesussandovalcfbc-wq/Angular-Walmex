@@ -64,7 +64,9 @@ export async function cargarGasolina(): Promise<any> {
     const buffer = await downloadViaGraphSharedLink(GASOLINA_SHARED_LINK);
     const wb = XLSX.read(buffer, { type: 'buffer' });
     const sheetName = wb.SheetNames.find(s => s.toLowerCase() === 'base datos') || wb.SheetNames[0];
+    if (!sheetName) throw new Error('El archivo de gasolina no contiene hojas.');
     const ws = wb.Sheets[sheetName];
+    if (!ws) throw new Error(`No se pudo leer la hoja ${sheetName}.`);
     const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1 });
 
     const COL_FECHA = 5, COL_TOTAL = 11, COL_VEH = 17;
@@ -121,6 +123,7 @@ export async function cargarNomina(): Promise<any> {
             const semKey = yyyy * 100 + ww;
             
             const ws = wb.Sheets[sname];
+            if (!ws) continue;
             const cellRef = XLSX.utils.encode_cell({ r: 47, c: 5 });
             const cell = ws[cellRef];
             const val = cell ? sv(cell.v) : 0;
@@ -612,7 +615,7 @@ export async function cargarDatos(cacheKey = "") {
       for (const gc of gastoCols) {
          const monto = sv(row[gc.idx]);
          if (monto > 0) {
-            const concepto = _conceptoGasto(gc.h, scDetalle);
+            const concepto = _conceptoGasto(gc.h || '', scDetalle);
             agregarGasto(finalSc, concepto, semKey, monto);
          }
       }

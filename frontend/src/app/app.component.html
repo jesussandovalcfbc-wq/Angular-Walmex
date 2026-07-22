@@ -334,26 +334,33 @@
 <!-- Sub-panel Devoluciones -->
 <div id="subPanelDevoluciones" style="display:none;">
 <div style="background:#fff; border:1px solid #c8d2e8; border-radius:8px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-<!-- Filtros -->
-<div style="margin-bottom:12px; font-size:11px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
-<div>Desde: <input id="devDesde" onchange="renderDevoluciones()" style="font-size:11px; padding:2px; border:1px solid #ccc;" type="date"/></div>
-<div>Hasta: <input id="devHasta" onchange="renderDevoluciones()" style="font-size:11px; padding:2px; border:1px solid #ccc;" type="date"/></div>
-<div>Folio: <input id="devFolioFilter" oninput="renderDevoluciones()" placeholder="Buscar folio..." style="font-size:11px; padding:2px; border:1px solid #ccc; width:100px;" type="text"/></div>
-<div>Producto: <input id="devProductoFilter" oninput="renderDevoluciones()" placeholder="Buscar producto..." style="font-size:11px; padding:2px; border:1px solid #ccc; width:130px;" type="text"/></div>
+<!-- Cabecera y Filtros -->
+<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:12px; gap:10px;">
+    <div style="font-size:11px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+    <div>Desde: <input id="devDesde" onchange="renderDevoluciones()" style="font-size:11px; padding:2px; border:1px solid #ccc;" type="date"/></div>
+    <div>Hasta: <input id="devHasta" onchange="renderDevoluciones()" style="font-size:11px; padding:2px; border:1px solid #ccc;" type="date"/></div>
+    <div>Folio: <input id="devFolioFilter" oninput="renderDevoluciones()" placeholder="Buscar folio..." style="font-size:11px; padding:2px; border:1px solid #ccc; width:100px;" type="text"/></div>
+    <div>Producto: <input id="devProductoFilter" oninput="renderDevoluciones()" placeholder="Buscar producto..." style="font-size:11px; padding:2px; border:1px solid #ccc; width:130px;" type="text"/></div>
+    </div>
+    <div style="display:flex; gap:8px;">
+        <button onclick="if(typeof window.verifyAllDevoluciones === 'function') window.verifyAllDevoluciones();" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:normal;background:#0d6efd;color:#000;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;letter-spacing:.02em;" title="Verificar todas las devoluciones listadas"><i class="fa-solid fa-check-double" style="color:#000;"></i> Verificar Todas</button>
+        <button onclick="if(typeof window.exportDevolucionesData === 'function') window.exportDevolucionesData();" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:normal;background:#198754;color:#000;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;letter-spacing:.02em;" title="Exportar a Excel"><i class="fa-solid fa-file-excel" style="color:#000;"></i> Exportar</button>
+    </div>
 </div>
 <!-- Tabla -->
 <div style="overflow-x:auto;">
-<table id="devolucionesTable" style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">
-<thead style="background:#fff;">
+<table id="devolucionesTable" class="table-bs table-bs-striped table-bs-hover table-bs-bordered">
+<thead>
 <tr>
-<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626;">Fecha</th>
-<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626;">Folio</th>
-<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626;">Serie</th>
-<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626;">Producto</th>
-<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626; text-align:right;">Cant. Devuelta</th>
-<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626; text-align:right;">Precio Unitario</th>
-<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626; text-align:right;">Total Devolucion</th>
-<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626; text-align:center;">Motivo</th>
+<th>Fecha</th>
+<th>Folio</th>
+<th>Serie</th>
+<th>Producto</th>
+<th class="text-end">Cant. Devuelta</th>
+<th class="text-end">Precio Unitario</th>
+<th class="text-end">Total Devolucion</th>
+<th class="text-center">Motivo</th>
+<th class="text-center">Verificado</th>
 </tr>
 </thead>
 <tbody id="devolucionesTbody"></tbody>
@@ -392,8 +399,14 @@
 
   </button>
   <div id="excelDropdownMenu" style="display:none; position:absolute; top:100%; right:0; background:white; border:1px solid #85b7d9; box-shadow:0 2px 5px rgba(0,0,0,0.2); z-index:1000; min-width:180px; text-align:left; border-radius:4px; overflow:hidden;">
-     <a href="#" onclick="event.preventDefault(); window.exportCaptureData(); window.toggleExcelDropdown(event);" style="display:block; padding:8px 12px; text-decoration:none; color:#333; border-bottom:1px solid #eee; font-size:10px; white-space:nowrap; font-family:Verdana, Geneva, sans-serif;">Exportar Programado</a>
-     <a href="#" onclick="event.preventDefault(); window.exportResumenData(); window.toggleExcelDropdown(event);" style="display:block; padding:8px 12px; text-decoration:none; color:#333; font-size:10px; white-space:nowrap; font-family:Verdana, Geneva, sans-serif;">Exportar Resumen</a>
+     <a href="#" onclick="event.preventDefault(); window.exportCaptureData(); window.toggleExcelDropdown(event);" style="display:flex; align-items:center; gap:8px; padding:8px 12px; text-decoration:none; color:#1a3a5c; border-bottom:1px solid #d7e1ef; font-size:10px; white-space:nowrap; font-family:Verdana, Geneva, sans-serif; font-weight:600;">
+         <i class="fa-solid fa-calendar-check" style="font-size:16px;color:#000;"></i>
+         <span>EXPORTAR PROGRAMADO</span>
+     </a>
+     <a href="#" onclick="event.preventDefault(); window.exportResumenData(); window.toggleExcelDropdown(event);" style="display:flex; align-items:center; gap:8px; padding:8px 12px; text-decoration:none; color:#1a3a5c; font-size:10px; white-space:nowrap; font-family:Verdana, Geneva, sans-serif; font-weight:600;">
+         <i class="fa-solid fa-file-excel" style="font-size:16px;color:#000;"></i>
+         <span>EXPORTAR RESUMEN</span>
+     </a>
   </div>
 </div>
 </div>

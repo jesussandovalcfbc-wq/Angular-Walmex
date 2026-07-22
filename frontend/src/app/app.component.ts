@@ -32,22 +32,24 @@ export class AppComponent implements AfterViewInit, OnDestroy {
 
     forkJoin({
       dashboard:    this.http.get(`${this.apiUrl}/dashboard-data`),
-      supabase:     this.http.get(`${this.apiUrl}/supabase-data`),
+      facturas:     this.http.get(`${this.apiUrl}/facturas-data`),
       devoluciones: this.http.get(`${this.apiUrl}/devoluciones`)
     }).subscribe({
       next: (responses: any) => {
         if (loaderTxt) loaderTxt.innerHTML = 'Conectando...';
 
-        const SUPABASE_URL = 'https://fzrhklskjjuscckfvvfa.supabase.co';
-        const SUPABASE_KEY = 'sb_publishable_63XnbBC_gPjZwxqjPnOBOg_4Qnxz5y9';
+        // La logica heredada conserva el mismo contrato REST, pero ahora apunta
+        // al backend local que protege la conexion privada de Neon.
+        const DATABASE_REST_URL = `${this.apiUrl}/db`;
+        const DATABASE_CLIENT_TOKEN = 'local-neon';
 
         if (typeof (window as any).initWalmexJS === 'function') {
           (window as any).initWalmexJS(
             responses.dashboard,
-            responses.supabase,
+            responses.facturas,
             responses.devoluciones,
-            SUPABASE_URL,
-            SUPABASE_KEY
+            DATABASE_REST_URL,
+            DATABASE_CLIENT_TOKEN
           );
         } else {
           console.error('initWalmexJS not found.');
