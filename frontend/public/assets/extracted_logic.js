@@ -290,8 +290,14 @@ function renderDevoluciones() {
         totalUnid  += cant;
         totalMonto += total;
         var fechaDisp = fechaRaw || 'N/A';
-        var rowId = 'dev_row_' + totalCount;
-        rows += '<tr id="'+rowId+'" class="dev-row-red">' +
+        var devolucionId = Number(r.id || 0);
+        var rowId = 'dev_row_' + devolucionId;
+        var isVerified = r.verificado === true || r.verificado === 'true';
+        var rowClass = isVerified ? 'dev-row-green' : 'dev-row-red';
+        var badgeColor = isVerified ? '#198754' : '#dc3545';
+        var badgeIcon = isVerified ? 'fa-check' : 'fa-xmark';
+        var badgeText = isVerified ? 'Verificado' : 'No verificado';
+        rows += '<tr id="'+rowId+'" data-devolucion-id="'+devolucionId+'" class="'+rowClass+'">' +
             '<td>'+fechaDisp+'</td>' +
             '<td>'+( r.folio || '-')+'</td>' +
             '<td>'+( r.serie || '-')+'</td>' +
@@ -300,7 +306,7 @@ function renderDevoluciones() {
             '<td class="text-end">$'+precio.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>' +
             '<td class="text-end">$'+total.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>' +
             '<td class="text-center fst-italic">'+(r.razon_devolucion || '-')+'</td>' +
-            '<td class="text-center"><div id="badge_'+rowId+'" class="dev-verify-badge" onclick="if(typeof window.toggleDevVerified===\'function\') window.toggleDevVerified(\''+rowId+'\')" style="display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:4px; font-size:11px; font-weight:600; cursor:pointer; background:#dc3545; color:#fff; border:none; transition:all 0.2s; user-select:none;"><i class="fa-solid fa-xmark"></i> No verificado</div></td>' +
+            '<td class="text-center"><div id="badge_'+rowId+'" data-verified="'+isVerified+'" class="dev-verify-badge" onclick="if(typeof window.toggleDevVerified===\'function\') window.toggleDevVerified(\''+rowId+'\')" style="display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:4px; font-size:11px; font-weight:600; cursor:pointer; background:'+badgeColor+'; color:#fff; border:none; transition:all 0.2s; user-select:none;"><i class="fa-solid '+badgeIcon+'"></i> '+badgeText+'</div></td>' +
             '</tr>';
     });
     tbody.innerHTML = rows || '<tr><td colspan="9" style="text-align:center; padding:20px; color:#aaa;">Sin devoluciones en el rango seleccionado</td></tr>';
@@ -8308,36 +8314,26 @@ window.toggleDevVerified = function(rowId, forceState) {
     
     var isVerified = badge.getAttribute('data-verified') === 'true';
     var targetState = (typeof forceState !== 'undefined') ? forceState : !isVerified;
-    
-    if (targetState) {
-        badge.setAttribute('data-verified', 'true');
-        badge.innerHTML = '<i class="fa-solid fa-check"></i> Verificado';
-        badge.style.background = '#198754';
-        badge.style.color = '#fff';
-        badge.style.border = 'none';
-        tr.classList.remove('dev-row-red');
-        tr.classList.add('dev-row-green');
-    } else {
-        badge.setAttribute('data-verified', 'false');
-        badge.innerHTML = '<i class="fa-solid fa-xmark"></i> No verificado';
-        badge.style.background = '#dc3545';
-        badge.style.color = '#fff';
-        badge.style.border = 'none';
-        tr.classList.remove('dev-row-green');
-        tr.classList.add('dev-row-red');
-    }
+    var devolucionId = Number(tr.getAttribute('data-devolucion-id') || 0);
+    if (!devolucionId || typeof window.persistDevolucionVerification !== 'function') return;
+    badge.style.pointerEvents = 'none';
+    badge.style.opacity = '0.65';
+    window.persistDevolucionVerification(devolucionId, targetState);
 };
 
 window.verifyAllDevoluciones = function() {
     var badges = document.querySelectorAll('.dev-verify-badge');
-    var count = 0;
+    var ids = [];
     badges.forEach(function(b) {
         if (b.getAttribute('data-verified') !== 'true') {
-            var rowId = b.id.replace('badge_', '');
-            window.toggleDevVerified(rowId, true);
-            count++;
+            var row = b.closest('tr');
+            var id = Number(row && row.getAttribute('data-devolucion-id'));
+            if (id) ids.push(id);
         }
     });
+    if (ids.length && typeof window.persistAllDevolucionesVerification === 'function') {
+        window.persistAllDevolucionesVerification(ids, true);
+    }
 };
 
 window.exportDevolucionesData = function() {

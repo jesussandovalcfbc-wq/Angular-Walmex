@@ -12,6 +12,8 @@ import {
   restDelete,
   updateInvoice,
   cancelInvoice,
+  setDevolucionVerification,
+  setDevolucionesVerification,
   verifyDatabase
 } from './database';
 import { cargarDatos, cargarGasolina, cargarNomina, invalidateDashboardCache } from './data_processing';
@@ -80,6 +82,34 @@ app.get('/api/devoluciones', async (req, res) => {
     res.json(data);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/devoluciones/verificacion', async (req, res) => {
+  try {
+    const ids: number[] = Array.isArray(req.body?.ids)
+      ? Array.from(new Set<number>(req.body.ids.map(Number).filter((id: number) => Number.isInteger(id) && id > 0)))
+      : [];
+    const verified = req.body?.verificado === true;
+    if (!ids.length) return res.status(400).json({ error: 'No se recibieron devoluciones validas.' });
+    const rows = await setDevolucionesVerification(ids, verified);
+    res.json({ message: `${rows.length} devolucion(es) actualizada(s).`, rows });
+  } catch (error: any) {
+    console.error('[Verificar devoluciones]', error.message);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.patch('/api/devoluciones/:id/verificacion', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const verified = req.body?.verificado === true;
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Devolucion invalida.' });
+    const row = await setDevolucionVerification(id, verified);
+    res.json({ message: verified ? 'Devolucion verificada.' : 'Verificacion retirada.', row });
+  } catch (error: any) {
+    console.error('[Verificar devolucion]', error.message);
+    res.status(400).json({ error: error.message });
   }
 });
 

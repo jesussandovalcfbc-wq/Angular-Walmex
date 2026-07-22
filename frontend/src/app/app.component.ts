@@ -78,6 +78,10 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   ngOnInit() {
     (window as any).openInvoiceEditor = (folio: string) => this.openInvoiceEditor(folio);
     (window as any).cancelInvoice = (folio: string) => this.cancelInvoice(folio);
+    (window as any).persistDevolucionVerification = (id: number, verified: boolean) =>
+      this.persistDevolucionVerification(id, verified);
+    (window as any).persistAllDevolucionesVerification = (ids: number[], verified: boolean) =>
+      this.persistAllDevolucionesVerification(ids, verified);
     // ── CSS variable para la altura del global header ─────────────────
     setInterval(() => {
       if ((window as any).state) {
@@ -119,6 +123,8 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   ngOnDestroy() {
     delete (window as any).openInvoiceEditor;
     delete (window as any).cancelInvoice;
+    delete (window as any).persistDevolucionVerification;
+    delete (window as any).persistAllDevolucionesVerification;
   }
 
   // ── Espera a que exista el box-hdr del Resumen ───────────────────────
@@ -276,5 +282,49 @@ export class AppComponent implements AfterViewInit, OnDestroy {
         console.error(err);
       }
     });
+  }
+
+  private persistDevolucionVerification(id: number, verified: boolean) {
+    this.http.patch(`${this.apiUrl}/devoluciones/${id}/verificacion`, {
+      verificado: verified
+    }).subscribe({
+      next: (response: any) => {
+        const updated = response?.row;
+        if (updated) {
+          this.devolucionesData = this.devolucionesData.map((row) =>
+            Number(row.id) === Number(updated.id) ? updated : row
+          );
+          this.renderUpdatedDevoluciones();
+        }
+      },
+      error: (err) => {
+        alert(err.error?.error || err.message || 'No se pudo guardar la verificacion.');
+      }
+    });
+  }
+
+  private persistAllDevolucionesVerification(ids: number[], verified: boolean) {
+    this.http.patch(`${this.apiUrl}/devoluciones/verificacion`, {
+      ids,
+      verificado: verified
+    }).subscribe({
+      next: (response: any) => {
+        const updatedRows = Array.isArray(response?.rows) ? response.rows : [];
+        const updatedById = new Map(updatedRows.map((row: any) => [Number(row.id), row]));
+        this.devolucionesData = this.devolucionesData.map((row) =>
+          updatedById.get(Number(row.id)) || row
+        );
+        this.renderUpdatedDevoluciones();
+      },
+      error: (err) => {
+        alert(err.error?.error || err.message || 'No se pudieron guardar las verificaciones.');
+      }
+    });
+  }
+
+  private renderUpdatedDevoluciones() {
+    if (typeof (window as any).updateChoferesData === 'function') {
+      (window as any).updateChoferesData(this.facturasData, this.devolucionesData);
+    }
   }
 }

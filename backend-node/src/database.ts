@@ -17,7 +17,8 @@ const TABLE_COLUMNS: Record<string, Set<string>> = {
   ]),
   devoluciones: new Set([
     'id', 'created_at', 'folio', 'serie', 'producto', 'cantidad_devuelta',
-    'precio_unidad', 'total_devolucion', 'razon_devolucion'
+    'precio_unidad', 'total_devolucion', 'razon_devolucion', 'verificado',
+    'verificado_at'
   ]),
   walmex_resumen_captura: new Set(['id', 'data', 'updated_at']),
   walmex_resumen_captura_v2: new Set([
@@ -67,8 +68,53 @@ export async function getFacturasData(): Promise<any[]> {
   return result.rows;
 }
 
+let devolucionesVerificationSchema: Promise<void> | null = null;
+
+async function ensureDevolucionesVerificationSchema(): Promise<void> {
+  if (!devolucionesVerificationSchema) {
+    devolucionesVerificationSchema = pool.query(
+      `ALTER TABLE devoluciones
+         ADD COLUMN IF NOT EXISTS verificado BOOLEAN NOT NULL DEFAULT FALSE,
+         ADD COLUMN IF NOT EXISTS verificado_at TIMESTAMPTZ`
+    ).then(() => undefined).catch((error) => {
+      devolucionesVerificationSchema = null;
+      throw error;
+    });
+  }
+  await devolucionesVerificationSchema;
+}
+
 export async function getDevolucionesData(): Promise<any[]> {
+  await ensureDevolucionesVerificationSchema();
   const result = await pool.query('SELECT * FROM devoluciones ORDER BY created_at DESC');
+  return result.rows;
+}
+
+export async function setDevolucionVerification(id: number, verified: boolean): Promise<any> {
+  await ensureDevolucionesVerificationSchema();
+  const result = await pool.query(
+    `UPDATE devoluciones
+        SET verificado = $1,
+            verificado_at = CASE WHEN $1 THEN NOW() ELSE NULL END
+      WHERE id = $2
+      RETURNING *`,
+    [verified, id]
+  );
+  if (!result.rows.length) throw new Error('La devolucion ya no existe.');
+  return result.rows[0];
+}
+
+export async function setDevolucionesVerification(ids: number[], verified: boolean): Promise<any[]> {
+  await ensureDevolucionesVerificationSchema();
+  if (!ids.length) return [];
+  const result = await pool.query(
+    `UPDATE devoluciones
+        SET verificado = $1,
+            verificado_at = CASE WHEN $1 THEN NOW() ELSE NULL END
+      WHERE id = ANY($2::bigint[])
+      RETURNING *`,
+    [verified, ids]
+  );
   return result.rows;
 }
 
@@ -237,7 +283,8 @@ export async function restInsert(table: string, query: Record<string, any>, payl
   columns.forEach((column) => allowedColumn(table, column));
   const values: any[] = [];
   const groups = rows.map((row) => `(${columns.map((column) => {
-    values.push(row[column]);
+    const val = row[column];
+    values.push(typeof val === 'object' && val !== null ? JSON.stringify(val) : val);
     return `$${values.length}`;
   }).join(',')})`);
   let sql = `INSERT INTO "${table}" (${columns.map((column) => `"${column}"`).join(',')}) VALUES ${groups.join(',')}`;
@@ -261,7 +308,8 @@ export async function restUpdate(table: string, query: Record<string, any>, payl
   columns.forEach((column) => allowedColumn(table, column));
   const values: any[] = [];
   const assignments = columns.map((column) => {
-    values.push(payload[column]);
+    const val = payload[column];
+    values.push(typeof val === 'object' && val !== null ? JSON.stringify(val) : val);
     return `"${column}" = $${values.length}`;
   });
   if (allowedTable(table).has('updated_at') && !columns.includes('updated_at')) assignments.push('"updated_at" = NOW()');
