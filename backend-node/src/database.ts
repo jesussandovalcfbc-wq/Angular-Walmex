@@ -283,7 +283,8 @@ export async function restInsert(table: string, query: Record<string, any>, payl
   columns.forEach((column) => allowedColumn(table, column));
   const values: any[] = [];
   const groups = rows.map((row) => `(${columns.map((column) => {
-    values.push(row[column]);
+    const val = row[column];
+    values.push(typeof val === 'object' && val !== null ? JSON.stringify(val) : val);
     return `$${values.length}`;
   }).join(',')})`);
   let sql = `INSERT INTO "${table}" (${columns.map((column) => `"${column}"`).join(',')}) VALUES ${groups.join(',')}`;
@@ -307,7 +308,8 @@ export async function restUpdate(table: string, query: Record<string, any>, payl
   columns.forEach((column) => allowedColumn(table, column));
   const values: any[] = [];
   const assignments = columns.map((column) => {
-    values.push(payload[column]);
+    const val = payload[column];
+    values.push(typeof val === 'object' && val !== null ? JSON.stringify(val) : val);
     return `"${column}" = $${values.length}`;
   });
   if (allowedTable(table).has('updated_at') && !columns.includes('updated_at')) assignments.push('"updated_at" = NOW()');
