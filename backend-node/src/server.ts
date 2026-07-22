@@ -3,7 +3,17 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { getSupabaseData, getDevolucionesData } from './supabase';
+import {
+  getFacturasData,
+  getDevolucionesData,
+  restSelect,
+  restInsert,
+  restUpdate,
+  restDelete,
+  updateInvoice,
+  cancelInvoice,
+  verifyDatabase
+} from './database';
 import { cargarDatos, cargarGasolina, cargarNomina, invalidateDashboardCache } from './data_processing';
 import { uploadExcelToSharepoint } from './sharepoint';
 
@@ -39,6 +49,15 @@ app.get('/api/health', (_req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
+app.get('/api/db-health', async (_req, res) => {
+  try {
+    await verifyDatabase();
+    res.status(200).json({ status: 'ok', database: 'neon' });
+  } catch (error: any) {
+    res.status(503).json({ status: 'error', error: error.message });
+  }
+});
+
 app.get('/api/dashboard-data', (req, res) => {
   if (!GLOBAL_DATA) {
     return res.status(503).json({ error: 'Data is still loading. Please try again later.' });
@@ -46,9 +65,9 @@ app.get('/api/dashboard-data', (req, res) => {
   res.json(GLOBAL_DATA);
 });
 
-app.get('/api/supabase-data', async (req, res) => {
+app.get('/api/facturas-data', async (_req, res) => {
   try {
-    const data = await getSupabaseData();
+    const data = await getFacturasData();
     res.json(data);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -61,6 +80,48 @@ app.get('/api/devoluciones', async (req, res) => {
     res.json(data);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/facturas/:folio', async (req, res) => {
+  try {
+    const folio = String(req.params.folio || '').trim();
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason : '';
+    if (!folio || !items.length) return res.status(400).json({ error: 'Factura o productos invalidos.' });
+    const rows = await updateInvoice(folio, items, reason);
+    res.json({ message: 'Factura modificada correctamente.', rows });
+  } catch (error: any) {
+    console.error('[Modificar factura]', error.message);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post('/api/facturas/:folio/cancelar', async (req, res) => {
+  try {
+    const folio = String(req.params.folio || '').trim();
+    if (!folio) return res.status(400).json({ error: 'Folio invalido.' });
+    const deleted = await cancelInvoice(folio);
+    res.json({ message: 'Factura cancelada y enviada a devoluciones.', deleted });
+  } catch (error: any) {
+    console.error('[Cancelar factura]', error.message);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.all('/api/db/rest/v1/:table', async (req, res) => {
+  try {
+    const table = req.params.table;
+    let data: any[];
+    if (req.method === 'GET') data = await restSelect(table, req.query);
+    else if (req.method === 'POST') data = await restInsert(table, req.query, req.body);
+    else if (req.method === 'PATCH') data = await restUpdate(table, req.query, req.body);
+    else if (req.method === 'DELETE') data = await restDelete(table, req.query);
+    else return res.status(405).json({ error: 'Metodo no permitido.' });
+    res.status(req.method === 'POST' ? 201 : 200).json(data);
+  } catch (error: any) {
+    console.error('[Neon REST]', error.message);
+    res.status(400).json({ error: error.message });
   }
 });
 

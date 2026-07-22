@@ -272,6 +272,14 @@
 <div>Hasta: <input id="cfbcHasta" onchange="renderChoferes()" style="font-size:11px; padding:2px; border:1px solid #ccc;" type="date"/></div>
 <select id="cfbcTienda" onchange="syncFilter(this, 'wmTienda'); renderChoferes()" style="font-size:11px; padding:2px; border:1px solid #ccc;"><option value="ALL">Tienda (Todas)</option></select>
 <select id="cfbcProducto" onchange="syncFilter(this, 'wmProducto'); renderChoferes()" style="font-size:11px; padding:2px; border:1px solid #ccc;"><option value="ALL">Producto (Todos)</option></select>
+<div class="input-group input-group-sm consolidado-estado-filter" title="Filtrar por estado">
+<span class="input-group-text"><i class="fa-solid fa-filter" aria-hidden="true"></i></span>
+<select id="cfbcEstado" class="form-select" aria-label="Estado CFBC" (change)="onConsolidadoEstadoChange($event, 'wmEstado')">
+<option value="ALL">Estado (Todos)</option>
+<option value="PROCESSING">Procesando</option>
+<option value="COMPLETED">Procesados</option>
+</select>
+</div>
 </div>
 <div style="height:auto; overflow:visible;">
 <table id="cfbcTable" style="width:100%; border-collapse:collapse; font-size:11px; text-align:left;">
@@ -310,6 +318,14 @@
 <div>Hasta: <input id="wmHasta" onchange="renderChoferes()" style="font-size:11px; padding:2px; border:1px solid #ccc;" type="date"/></div>
 <select id="wmTienda" onchange="syncFilter(this, 'cfbcTienda'); renderChoferes()" style="font-size:11px; padding:2px; border:1px solid #ccc;"><option value="ALL">Tienda (Todas)</option></select>
 <select id="wmProducto" onchange="syncFilter(this, 'cfbcProducto'); renderChoferes()" style="font-size:11px; padding:2px; border:1px solid #ccc;"><option value="ALL">Producto (Todos)</option></select>
+<div class="input-group input-group-sm consolidado-estado-filter" title="Filtrar por estado">
+<span class="input-group-text"><i class="fa-solid fa-filter" aria-hidden="true"></i></span>
+<select id="wmEstado" class="form-select" aria-label="Estado Walmart" (change)="onConsolidadoEstadoChange($event, 'cfbcEstado')">
+<option value="ALL">Estado (Todos)</option>
+<option value="PROCESSING">Procesando</option>
+<option value="COMPLETED">Procesados</option>
+</select>
+</div>
 </div>
 <div style="height:auto; overflow:visible;">
 <table id="walmartTable" style="width:100%; border-collapse:collapse; font-size:11px; text-align:left;">
@@ -331,29 +347,103 @@
 </div>
 </div>
 </div><!-- end subPanelConsolidado -->
+<div *ngIf="invoiceEditorOpen" class="invoice-modal-backdrop" (click)="closeInvoiceEditor()">
+  <section class="invoice-modal" role="dialog" aria-modal="true" aria-labelledby="invoiceModalTitle" (click)="$event.stopPropagation()">
+    <header class="invoice-modal-header">
+      <div>
+        <div class="invoice-modal-kicker">FACTURA {{ editingInvoice?.folio }}</div>
+        <h3 id="invoiceModalTitle">Modificar factura</h3>
+        <p>{{ editingInvoice?.tienda }}</p>
+      </div>
+      <button type="button" class="btn-close invoice-close-btn" aria-label="Cerrar" (click)="closeInvoiceEditor()" [disabled]="invoiceSaving">
+        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+      </button>
+    </header>
+
+    <div class="invoice-modal-body">
+      <div class="table-responsive invoice-edit-table-wrap">
+        <table class="table table-sm table-bordered align-middle invoice-edit-table">
+          <thead>
+            <tr>
+              <th>Producto</th>
+              <th class="text-end">Precio unitario</th>
+              <th class="text-center">Unidades actuales</th>
+              <th class="text-center">Nuevas unidades</th>
+              <th class="text-end">Nuevo total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of editingInvoice?.items">
+              <td>{{ item.producto }}</td>
+              <td class="text-end">{{ item.precio | currency:'USD':'symbol':'1.2-2' }}</td>
+              <td class="text-center">{{ item.originalUnits }}</td>
+              <td class="text-center">
+                <input class="form-control form-control-sm invoice-units-input" type="number" min="0" step="1"
+                  [(ngModel)]="item.unidades" [disabled]="invoiceSaving" [attr.aria-label]="'Nuevas unidades de ' + item.producto" />
+              </td>
+              <td class="text-end fw-semibold">{{ (item.unidades * item.precio) | currency:'USD':'symbol':'1.2-2' }}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <th colspan="4" class="text-end">Total de factura</th>
+              <th class="text-end">{{ invoiceTotal() | currency:'USD':'symbol':'1.2-2' }}</th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div *ngIf="invoiceHasReduction()" class="invoice-reason-box">
+        <label for="invoiceReason" class="form-label"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Motivo de la reduccion</label>
+        <input id="invoiceReason" class="form-control form-control-sm" type="text" maxlength="180"
+          placeholder="Ej. Producto no recibido o cantidad incompleta" [(ngModel)]="editingInvoice.reason" [disabled]="invoiceSaving" />
+        <small>La diferencia se registrara automaticamente en Devoluciones.</small>
+      </div>
+
+      <div *ngIf="invoiceActionMessage" class="alert alert-danger invoice-alert" role="alert">
+        <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i> {{ invoiceActionMessage }}
+      </div>
+    </div>
+
+    <footer class="invoice-modal-footer">
+      <button type="button" class="btn btn-outline-secondary btn-sm" (click)="closeInvoiceEditor()" [disabled]="invoiceSaving">Cerrar</button>
+      <button type="button" class="btn btn-primary btn-sm" (click)="saveInvoiceChanges()" [disabled]="invoiceSaving">
+        <i class="fa-solid" [ngClass]="invoiceSaving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'" aria-hidden="true"></i>
+        {{ invoiceSaving ? 'Guardando...' : 'Guardar cambios' }}
+      </button>
+    </footer>
+  </section>
+</div>
 <!-- Sub-panel Devoluciones -->
 <div id="subPanelDevoluciones" style="display:none;">
 <div style="background:#fff; border:1px solid #c8d2e8; border-radius:8px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-<!-- Filtros -->
-<div style="margin-bottom:12px; font-size:11px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
-<div>Desde: <input id="devDesde" onchange="renderDevoluciones()" style="font-size:11px; padding:2px; border:1px solid #ccc;" type="date"/></div>
-<div>Hasta: <input id="devHasta" onchange="renderDevoluciones()" style="font-size:11px; padding:2px; border:1px solid #ccc;" type="date"/></div>
-<div>Folio: <input id="devFolioFilter" oninput="renderDevoluciones()" placeholder="Buscar folio..." style="font-size:11px; padding:2px; border:1px solid #ccc; width:100px;" type="text"/></div>
-<div>Producto: <input id="devProductoFilter" oninput="renderDevoluciones()" placeholder="Buscar producto..." style="font-size:11px; padding:2px; border:1px solid #ccc; width:130px;" type="text"/></div>
+<!-- Cabecera y Filtros -->
+<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:12px; gap:10px;">
+    <div style="font-size:11px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+    <div>Desde: <input id="devDesde" onchange="renderDevoluciones()" style="font-size:11px; padding:2px; border:1px solid #ccc;" type="date"/></div>
+    <div>Hasta: <input id="devHasta" onchange="renderDevoluciones()" style="font-size:11px; padding:2px; border:1px solid #ccc;" type="date"/></div>
+    <div>Folio: <input id="devFolioFilter" oninput="renderDevoluciones()" placeholder="Buscar folio..." style="font-size:11px; padding:2px; border:1px solid #ccc; width:100px;" type="text"/></div>
+    <div>Producto: <input id="devProductoFilter" oninput="renderDevoluciones()" placeholder="Buscar producto..." style="font-size:11px; padding:2px; border:1px solid #ccc; width:130px;" type="text"/></div>
+    </div>
+    <div style="display:flex; gap:8px;">
+        <button onclick="if(typeof window.verifyAllDevoluciones === 'function') window.verifyAllDevoluciones();" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:normal;background:#0d6efd;color:#000;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;letter-spacing:.02em;" title="Verificar todas las devoluciones listadas"><i class="fa-solid fa-check-double" style="color:#000;"></i> Verificar Todas</button>
+        <button onclick="if(typeof window.exportDevolucionesData === 'function') window.exportDevolucionesData();" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:normal;background:#198754;color:#000;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;letter-spacing:.02em;" title="Exportar a Excel"><i class="fa-solid fa-file-excel" style="color:#000;"></i> Exportar</button>
+    </div>
 </div>
 <!-- Tabla -->
 <div style="overflow-x:auto;">
-<table id="devolucionesTable" style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">
-<thead style="background:#fff;">
+<table id="devolucionesTable" class="table-bs table-bs-striped table-bs-hover table-bs-bordered">
+<thead>
 <tr>
-<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626;">Fecha</th>
-<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626;">Folio</th>
-<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626;">Serie</th>
-<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626;">Producto</th>
-<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626; text-align:right;">Cant. Devuelta</th>
-<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626; text-align:right;">Precio Unitario</th>
-<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626; text-align:right;">Total Devolucion</th>
-<th style="padding:8px 6px; border-bottom:2px solid #dc2626; color:#dc2626; text-align:center;">Motivo</th>
+<th>Fecha</th>
+<th>Folio</th>
+<th>Serie</th>
+<th>Producto</th>
+<th class="text-end">Cant. Devuelta</th>
+<th class="text-end">Precio Unitario</th>
+<th class="text-end">Total Devolucion</th>
+<th class="text-center">Motivo</th>
+<th class="text-center">Verificado</th>
 </tr>
 </thead>
 <tbody id="devolucionesTbody"></tbody>
@@ -392,8 +482,14 @@
 
   </button>
   <div id="excelDropdownMenu" style="display:none; position:absolute; top:100%; right:0; background:white; border:1px solid #85b7d9; box-shadow:0 2px 5px rgba(0,0,0,0.2); z-index:1000; min-width:180px; text-align:left; border-radius:4px; overflow:hidden;">
-     <a href="#" onclick="event.preventDefault(); window.exportCaptureData(); window.toggleExcelDropdown(event);" style="display:block; padding:8px 12px; text-decoration:none; color:#333; border-bottom:1px solid #eee; font-size:10px; white-space:nowrap; font-family:Verdana, Geneva, sans-serif;">Exportar Programado</a>
-     <a href="#" onclick="event.preventDefault(); window.exportResumenData(); window.toggleExcelDropdown(event);" style="display:block; padding:8px 12px; text-decoration:none; color:#333; font-size:10px; white-space:nowrap; font-family:Verdana, Geneva, sans-serif;">Exportar Resumen</a>
+     <a href="#" onclick="event.preventDefault(); window.exportCaptureData(); window.toggleExcelDropdown(event);" style="display:flex; align-items:center; gap:8px; padding:8px 12px; text-decoration:none; color:#1a3a5c; border-bottom:1px solid #d7e1ef; font-size:10px; white-space:nowrap; font-family:Verdana, Geneva, sans-serif; font-weight:600;">
+         <i class="fa-solid fa-calendar-check" style="font-size:16px;color:#000;"></i>
+         <span>EXPORTAR PROGRAMADO</span>
+     </a>
+     <a href="#" onclick="event.preventDefault(); window.exportResumenData(); window.toggleExcelDropdown(event);" style="display:flex; align-items:center; gap:8px; padding:8px 12px; text-decoration:none; color:#1a3a5c; font-size:10px; white-space:nowrap; font-family:Verdana, Geneva, sans-serif; font-weight:600;">
+         <i class="fa-solid fa-file-excel" style="font-size:16px;color:#000;"></i>
+         <span>EXPORTAR RESUMEN</span>
+     </a>
   </div>
 </div>
 </div>
