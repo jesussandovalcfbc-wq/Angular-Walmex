@@ -10,6 +10,11 @@ const TABLE_COLUMNS: Record<string, Set<string>> = {
     'folio', 'producto', 'unidades', 'precio_unidad', 'venta_total', 'created_at',
     'url_factura', 'url_acuse', 'razon_sin_acuse'
   ]),
+  facturas_canceladas: new Set([
+    'id', 'diario', 'ruta', 'viajes_por_ruta', 'prueba', 'sem', 'tienda', 'salida',
+    'folio', 'producto', 'unidades', 'precio_unidad', 'venta_total', 'created_at',
+    'fecha_cancelacion', 'url_factura', 'url_acuse', 'razon_sin_acuse'
+  ]),
   devoluciones: new Set([
     'id', 'created_at', 'folio', 'serie', 'producto', 'cantidad_devuelta',
     'precio_unidad', 'total_devolucion', 'razon_devolucion'
@@ -65,6 +70,121 @@ export async function getFacturasData(): Promise<any[]> {
 export async function getDevolucionesData(): Promise<any[]> {
   const result = await pool.query('SELECT * FROM devoluciones ORDER BY created_at DESC');
   return result.rows;
+}
+
+type InvoiceItemUpdate = {
+  id: number;
+  unidades: number;
+};
+
+export async function updateInvoice(
+  folio: string,
+  items: InvoiceItemUpdate[],
+  reason: string
+): Promise<any[]> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const current = await client.query(
+      'SELECT * FROM facturas_folios WHERE folio = $1 ORDER BY id FOR UPDATE',
+      [folio]
+    );
+    if (!current.rows.length) throw new Error('La factura ya no existe o fue cancelada.');
+
+    const currentById = new Map(current.rows.map((row: any) => [Number(row.id), row]));
+    if (items.length !== current.rows.length) {
+      throw new Error('La factura cambio mientras se editaba. Actualiza la pagina e intenta nuevamente.');
+    }
+
+    const normalized = items.map((item) => {
+      const id = Number(item.id);
+      const unidades = Number(item.unidades);
+      const row: any = currentById.get(id);
+      if (!row) throw new Error('Uno de los productos ya no pertenece a esta factura.');
+      if (!Number.isInteger(unidades) || unidades < 0) {
+        throw new Error('Las unidades deben ser numeros enteros iguales o mayores a cero.');
+      }
+      return { id, unidades, row };
+    });
+
+    const hasReduction = normalized.some(({ unidades, row }) => unidades < Number(row.unidades || 0));
+    if (hasReduction && !reason.trim()) throw new Error('Escribe el motivo de la reduccion.');
+
+    for (const item of normalized) {
+      const oldUnits = Number(item.row.unidades || 0);
+      const unitPrice = Number(item.row.precio_unidad || 0);
+      await client.query(
+        'UPDATE facturas_folios SET unidades = $1, venta_total = $2 WHERE id = $3 AND folio = $4',
+        [item.unidades, item.unidades * unitPrice, item.id, folio]
+      );
+      const returned = oldUnits - item.unidades;
+      if (returned > 0) {
+        await client.query(
+          `INSERT INTO devoluciones
+            (folio, serie, producto, cantidad_devuelta, precio_unidad, total_devolucion, razon_devolucion)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [folio, '', item.row.producto, returned, unitPrice, returned * unitPrice, reason.trim()]
+        );
+      }
+    }
+
+    const updated = await client.query(
+      'SELECT * FROM facturas_folios WHERE folio = $1 ORDER BY id',
+      [folio]
+    );
+    await client.query('COMMIT');
+    return updated.rows;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function cancelInvoice(folio: string): Promise<number> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const current = await client.query(
+      'SELECT * FROM facturas_folios WHERE folio = $1 ORDER BY id FOR UPDATE',
+      [folio]
+    );
+    if (!current.rows.length) throw new Error('La factura ya no existe o ya fue cancelada.');
+
+    await client.query(
+      `INSERT INTO facturas_canceladas
+        (diario, ruta, viajes_por_ruta, prueba, sem, tienda, salida, folio, producto,
+         unidades, precio_unidad, venta_total, created_at, fecha_cancelacion,
+         url_factura, url_acuse, razon_sin_acuse)
+       SELECT diario, ruta, viajes_por_ruta, prueba, sem, tienda, salida, folio, producto,
+         unidades, precio_unidad, venta_total, created_at, NOW(),
+         url_factura, url_acuse, razon_sin_acuse
+       FROM facturas_folios WHERE folio = $1`,
+      [folio]
+    );
+
+    for (const row of current.rows) {
+      const units = Number(row.unidades || 0);
+      const unitPrice = Number(row.precio_unidad || 0);
+      if (units <= 0) continue;
+      await client.query(
+        `INSERT INTO devoluciones
+          (folio, serie, producto, cantidad_devuelta, precio_unidad, total_devolucion, razon_devolucion)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [folio, '', row.producto, units, unitPrice, units * unitPrice, 'Cancelada automaticamente']
+      );
+    }
+
+    const deleted = await client.query('DELETE FROM facturas_folios WHERE folio = $1', [folio]);
+    await client.query('COMMIT');
+    return deleted.rowCount || 0;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 type Filter = { column: string; operator: 'eq' | 'gt'; value: string };

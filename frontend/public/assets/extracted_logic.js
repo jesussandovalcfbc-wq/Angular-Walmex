@@ -202,6 +202,11 @@ document.addEventListener('mouseup', function() {
         dragSource = null;
         document.body.classList.remove('dragging-checks');
         window.saveChecks();
+        var cfbcStatus = document.getElementById('cfbcEstado');
+        var wmStatus = document.getElementById('wmEstado');
+        var statusFilterActive = (cfbcStatus && cfbcStatus.value !== 'ALL') ||
+                                 (wmStatus && wmStatus.value !== 'ALL');
+        if (statusFilterActive && typeof renderChoferes === 'function') renderChoferes();
     }
 });
 
@@ -1016,6 +1021,8 @@ function renderChoferes() {
     var selCfbcProd = document.getElementById('cfbcProducto');
     var selWmTienda = document.getElementById('wmTienda');
     var selWmProd = document.getElementById('wmProducto');
+    var selCfbcEstado = document.getElementById('cfbcEstado');
+    var selWmEstado = document.getElementById('wmEstado');
     
     if (selCfbcTienda && selCfbcTienda.options.length <= 1) {
         DATA.tiendas.forEach(function(t) {
@@ -1032,11 +1039,13 @@ function renderChoferes() {
     var cfbcH = document.getElementById('cfbcHasta') ? document.getElementById('cfbcHasta').value : '';
     var cfbcT = selCfbcTienda ? selCfbcTienda.value : 'ALL';
     var cfbcP = selCfbcProd ? selCfbcProd.value : 'ALL';
+    var cfbcEstado = selCfbcEstado ? selCfbcEstado.value : 'ALL';
 
     var wmD = document.getElementById('wmDesde') ? document.getElementById('wmDesde').value : '';
     var wmH = document.getElementById('wmHasta') ? document.getElementById('wmHasta').value : '';
     var wmT = selWmTienda ? selWmTienda.value : 'ALL';
     var wmP = selWmProd ? selWmProd.value : 'ALL';
+    var wmEstado = selWmEstado ? selWmEstado.value : 'ALL';
     
     var cfbcCount = 0;
     if (DATABASE_DATA && DATABASE_DATA.length > 0) {
@@ -1049,9 +1058,16 @@ function renderChoferes() {
             if (cfbcP !== 'ALL' && row.producto !== cfbcP) return;
             if (cfbcD && normRowFecha < cfbcD) return;
             if (cfbcH && normRowFecha > cfbcH) return;
+
+            var rowKey = rowFecha + '|' + (row.tienda || '') + '|' + (row.producto || '');
+            var rowProcesado = !!(row.url_acuse || row.razon_sin_acuse || checkedCFBC.has(rowKey));
+            if (cfbcEstado === 'PROCESSING' && rowProcesado) return;
+            if (cfbcEstado === 'COMPLETED' && !rowProcesado) return;
             
             var rowVenta = parseFloat(row.venta_total || row.venta || 0);
             cfbcRowsArr.push({
+                  id: Number(row.id),
+                  key: rowKey,
                   fecha: rowFecha,
                   folio: row.folio || '',
                   tienda: row.tienda || '',
@@ -1073,7 +1089,7 @@ function renderChoferes() {
             });
             var currentGroup = null;
               var subU = 0, subV = 0;
-              var curFactura = '', curAcuse = '', curRazon = '';
+              var curFactura = '', curAcuse = '', curRazon = '', curFolio = '';
               
               function emitCfbcSub() {
                   if (currentGroup !== null) {
@@ -1083,11 +1099,22 @@ function renderChoferes() {
                       if (curRazon) iconsHtml += '<span style="color:#d97706; font-size:12px; cursor:help; vertical-align:middle; display:flex; align-items:center; gap:4px;" title="Sin Folio: '+curRazon+'">⚠️ Sin Folio</span>';
                       iconsHtml += '</div>';
 
+                      var actionsHtml = '';
+                      if (curFolio) {
+                          var encodedFolio = encodeURIComponent(curFolio);
+                          actionsHtml = '<div class="invoice-actions">' +
+                              '<button type="button" class="btn btn-sm btn-outline-primary invoice-action-btn" onclick="window.openInvoiceEditor(decodeURIComponent(\''+encodedFolio+'\'))" title="Modificar factura">' +
+                              '<i class="fa-solid fa-pen-to-square" aria-hidden="true"></i><span>Modificar</span></button>' +
+                              '<button type="button" class="btn btn-sm btn-outline-danger invoice-action-btn" onclick="window.cancelInvoice(decodeURIComponent(\''+encodedFolio+'\'))" title="Cancelar factura">' +
+                              '<i class="fa-solid fa-ban" aria-hidden="true"></i><span>Cancelar factura</span></button>' +
+                              '</div>';
+                      }
+
                       cfbcHTML += '<tr class="subtotal-row" style="background:#e2e8f0; font-weight:bold;">' +
                                   '<td colspan="6" style="text-align:right; font-size:11px; padding:4px 5px;">' + iconsHtml + '<span style="line-height:25px;">Total ' + currentGroup + ':</span></td>' +
                                   '<td class="sub-u" style="text-align:right; font-size:11px; padding:4px 5px; vertical-align:middle;">' + subU.toLocaleString('en-US') + '</td>' +
                                   '<td class="sub-v" style="text-align:right; font-size:11px; padding:4px 5px; vertical-align:middle;">$' + subV.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) + '</td>' +
-                                  '<td></td></tr>';
+                                  '<td style="padding:3px 5px;">'+actionsHtml+'</td></tr>';
                   }
               }
               
@@ -1101,6 +1128,7 @@ function renderChoferes() {
                       curFactura = r.url_factura;
                       curAcuse = r.url_acuse;
                       curRazon = r.razon_sin_acuse;
+                      curFolio = r.folio;
                   } else {
                       if (!curFactura && r.url_factura) curFactura = r.url_factura;
                       if (!curAcuse && r.url_acuse) curAcuse = r.url_acuse;
@@ -1110,7 +1138,7 @@ function renderChoferes() {
                 subV += r.venta;
                 cfbcU += r.unidades;
                 cfbcV += r.venta;
-                var rKey = r.fecha + '|' + r.tienda + '|' + r.producto;
+                var rKey = r.key;
                 
                 // Auto-verificar si el chofer ya procesó (subió acuse o puso razón)
                 if (r.url_acuse || r.razon_sin_acuse) {
@@ -1166,8 +1194,13 @@ function renderChoferes() {
                         var metricas = DATA.resumen_diario[tienda][sem][prod][fecha];
                         var emb = metricas.embarque || 0;
                         if (emb > 0) {
+                            var wmRowKey = fecha + '|' + tienda + '|' + prod;
+                            var wmRowProcesado = checkedWalmart.has(wmRowKey);
+                            if (wmEstado === 'PROCESSING' && wmRowProcesado) return;
+                            if (wmEstado === 'COMPLETED' && !wmRowProcesado) return;
                             var vCfbc = parseFloat(metricas.venta_cfbc || 0);
                             wmRows.push({
+                                key: wmRowKey,
                                 fecha: fecha,
                                 tienda: tienda,
                                 producto: prod,
@@ -1207,7 +1240,7 @@ function renderChoferes() {
             }
             subUWm += row.unidades;
             subVWm += row.venta;
-            var rKey = row.fecha + '|' + row.tienda + '|' + row.producto;
+            var rKey = row.key;
             var chk = checkedWalmart.has(rKey) ? 'checked' : '';
             var flg = flaggedWalmart.has(rKey) ? 'flagged' : '';
             var cClass = '';
@@ -8259,6 +8292,13 @@ window.initWalmexJS = function(dashboardData, databaseData, devolucionesData, da
     };
 
     Promise.resolve(window.loadUIStateFromNeon()).then(startApp, startApp);
+};
+
+window.updateChoferesData = function(databaseData, devolucionesData) {
+    DATABASE_DATA = Array.isArray(databaseData) ? databaseData : [];
+    DEVOLUCIONES_DATA = Array.isArray(devolucionesData) ? devolucionesData : [];
+    if (typeof renderChoferes === 'function') renderChoferes();
+    if (typeof renderDevoluciones === 'function') renderDevoluciones();
 };
 
 window.toggleDevVerified = function(rowId, forceState) {

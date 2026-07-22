@@ -10,6 +10,8 @@ import {
   restInsert,
   restUpdate,
   restDelete,
+  updateInvoice,
+  cancelInvoice,
   verifyDatabase
 } from './database';
 import { cargarDatos, cargarGasolina, cargarNomina, invalidateDashboardCache } from './data_processing';
@@ -78,6 +80,32 @@ app.get('/api/devoluciones', async (req, res) => {
     res.json(data);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/facturas/:folio', async (req, res) => {
+  try {
+    const folio = String(req.params.folio || '').trim();
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason : '';
+    if (!folio || !items.length) return res.status(400).json({ error: 'Factura o productos invalidos.' });
+    const rows = await updateInvoice(folio, items, reason);
+    res.json({ message: 'Factura modificada correctamente.', rows });
+  } catch (error: any) {
+    console.error('[Modificar factura]', error.message);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post('/api/facturas/:folio/cancelar', async (req, res) => {
+  try {
+    const folio = String(req.params.folio || '').trim();
+    if (!folio) return res.status(400).json({ error: 'Folio invalido.' });
+    const deleted = await cancelInvoice(folio);
+    res.json({ message: 'Factura cancelada y enviada a devoluciones.', deleted });
+  } catch (error: any) {
+    console.error('[Cancelar factura]', error.message);
+    res.status(400).json({ error: error.message });
   }
 });
 
