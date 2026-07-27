@@ -439,7 +439,7 @@
 <th>Fecha</th>
 <th>F. Factura</th>
 <th>Folio</th>
-<th>Serie</th>
+<th>Num Tienda</th>
 <th>Producto</th>
 <th class="text-end">Cant. Devuelta</th>
 <th class="text-end">Precio Unitario</th>
@@ -460,9 +460,9 @@
     <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:12px;">
     <div>Desde: <input id="mermaDesde" onchange="renderMermas()" style="font-size:11px; padding:2px; border:1px solid #ccc;" type="date"/></div>
     <div>Hasta: <input id="mermaHasta" onchange="renderMermas()" style="font-size:11px; padding:2px; border:1px solid #ccc;" type="date"/></div>
-    <div>Serie: <input id="mermaSerieFilter" oninput="renderMermas()" placeholder="Buscar serie..." style="font-size:11px; padding:2px; border:1px solid #ccc; width:100px;" type="text"/></div>
-    <div>Tienda: <input id="mermaTiendaFilter" oninput="renderMermas()" placeholder="Buscar tienda..." style="font-size:11px; padding:2px; border:1px solid #ccc; width:130px;" type="text"/></div>
-    <div>Descripción: <input id="mermaFlorFilter" oninput="renderMermas()" placeholder="Buscar descripción..." style="font-size:11px; padding:2px; border:1px solid #ccc; width:130px;" type="text"/></div>
+    <div>Num Tienda: <select id="mermaSerieFilter" onchange="renderMermas()" style="font-size:11px; padding:2px; border:1px solid #ccc; width:100px;"><option value="">Todas</option></select></div>
+    <div>Nomb Tienda: <select id="mermaTiendaFilter" onchange="renderMermas()" style="font-size:11px; padding:2px; border:1px solid #ccc; width:130px;"><option value="">Todas</option></select></div>
+    <div>Descripción: <select id="mermaFlorFilter" onchange="renderMermas()" style="font-size:11px; padding:2px; border:1px solid #ccc; width:130px;"><option value="">Todas</option></select></div>
     </div>
     
     <div style="overflow-x:auto; border:1px solid #dee2e6; border-radius:4px;">
@@ -470,8 +470,8 @@
 <thead>
 <tr>
 <th>Fecha</th>
-<th>Serie</th>
-<th>Tienda</th>
+<th>Num Tienda</th>
+<th>Nomb Tienda</th>
 <th>Descripción</th>
 <th class="text-end">Cant. Piezas</th>
 <th class="text-end">Monto</th>
