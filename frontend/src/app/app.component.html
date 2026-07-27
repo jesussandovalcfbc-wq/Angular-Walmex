@@ -37,6 +37,7 @@
 <div id="choferesMenu" style="display:none; position:absolute; top:100%; left:0; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:9999; min-width:160px; padding:4px 0; margin-top:2px;">
 <div onclick="openChoferesSubTab('consolidado')" onmouseout="this.style.background=''" onmouseover="this.style.background='#f1f5f9'" style="padding:8px 16px; cursor:pointer; font-size:13px; color:#1e293b; font-weight:500;">Consolidado</div>
 <div onclick="openChoferesSubTab('devoluciones')" onmouseout="this.style.background=''" onmouseover="this.style.background='#f1f5f9'" style="padding:8px 16px; cursor:pointer; font-size:13px; color:#1e293b; font-weight:500;">Devoluciones</div>
+<div onclick="openChoferesSubTab('mermas')" onmouseout="this.style.background=''" onmouseover="this.style.background='#f1f5f9'" style="padding:8px 16px; cursor:pointer; font-size:13px; color:#1e293b; font-weight:500;">Mermas</div>
 </div>
 </div>
 </div>
@@ -436,6 +437,7 @@
 <thead>
 <tr>
 <th>Fecha</th>
+<th>F. Factura</th>
 <th>Folio</th>
 <th>Serie</th>
 <th>Producto</th>
@@ -451,6 +453,42 @@
 </div>
 </div>
 </div><!-- end subPanelDevoluciones -->
+
+<!-- Sub-panel Mermas -->
+<div id="subPanelMermas" style="display:none;">
+    
+    <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:12px;">
+    <div>Desde: <input id="mermaDesde" onchange="renderMermas()" style="font-size:11px; padding:2px; border:1px solid #ccc;" type="date"/></div>
+    <div>Hasta: <input id="mermaHasta" onchange="renderMermas()" style="font-size:11px; padding:2px; border:1px solid #ccc;" type="date"/></div>
+    <div>Serie: <input id="mermaSerieFilter" oninput="renderMermas()" placeholder="Buscar serie..." style="font-size:11px; padding:2px; border:1px solid #ccc; width:100px;" type="text"/></div>
+    <div>Tienda: <input id="mermaTiendaFilter" oninput="renderMermas()" placeholder="Buscar tienda..." style="font-size:11px; padding:2px; border:1px solid #ccc; width:130px;" type="text"/></div>
+    <div>Descripción: <input id="mermaFlorFilter" oninput="renderMermas()" placeholder="Buscar descripción..." style="font-size:11px; padding:2px; border:1px solid #ccc; width:130px;" type="text"/></div>
+    </div>
+    
+    <div style="overflow-x:auto; border:1px solid #dee2e6; border-radius:4px;">
+<table id="mermasTable" class="table-bs table-bs-striped table-bs-hover table-bs-bordered">
+<thead>
+<tr>
+<th>Fecha</th>
+<th>Serie</th>
+<th>Tienda</th>
+<th>Descripción</th>
+<th class="text-end">Cant. Piezas</th>
+<th class="text-end">Monto</th>
+</tr>
+</thead>
+<tbody id="mermasTbody"></tbody>
+<tfoot>
+<tr style="background:#f8f9fa; font-weight:bold;">
+<td colspan="4" class="text-end">Totales:</td>
+<td class="text-end" id="mermaTotalPiezas">0</td>
+<td class="text-end" id="mermaTotalMonto">$0.00</td>
+</tr>
+</tfoot>
+</table>
+    </div>
+</div><!-- end subPanelMermas -->
+
 </div><!-- end viewChoferes -->
 <!-- Vista Resumen -->
 <div id="viewResumen" style="display:none;">
