@@ -1,0 +1,52 @@
+# ═══════════════════════════════════════════════════════════════
+# Render Deployment Configuration - WALMEX
+# ═══════════════════════════════════════════════════════════════
+# Deploy como contenedor Docker en Render.
+#
+# Pasos:
+#   1. Sube este repo a GitHub
+#   2. En Render, crea un "New Web Service" y conecta el repo
+#   3. Render detectara el Dockerfile automaticamente
+#   4. Configura las siguientes variables de entorno en el dashboard de Render:
+#      - DATABASE_URL
+#      - TENANT_ID
+#      - CLIENT_ID
+#      - CLIENT_SECRET
+#      - SITE_URL
+#      - FILE_PATH
+#      - GEMINI_API_KEY
+#      - ANTHROPIC_API_KEY (opcional)
+#
+# IMPORTANTE: El archivo .env NO se sube al repo. Las variables
+# se configuran directamente en el dashboard de Render.
+# ═══════════════════════════════════════════════════════════════
+
+services:
+  - type: web
+    name: walmex-app
+    runtime: image
+    repo: https://github.com/jesussandovalcfbc-wq/Angular-Walmex  # 👈 ya correcto
+    dockerfilePath: ./Dockerfile
+    dockerContext: ./
+    plan: starter  # $7/month
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "8000"
+      - key: DATABASE_URL
+        sync: false
+      - key: TENANT_ID
+        sync: false
+      - key: CLIENT_ID
+        sync: false
+      - key: CLIENT_SECRET
+        sync: false
+      - key: SITE_URL
+        sync: false
+      - key: FILE_PATH
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
