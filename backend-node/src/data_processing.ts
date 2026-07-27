@@ -219,6 +219,7 @@ export async function cargarDatos(cacheKey = "") {
   
   const idxProd = col('Desc Art 1');
   const idxTienda = col('Nombre Tienda/Club');
+  const idxNumTienda = col('Num de Tienda');
   const idxSemana = col('SEM');
   const idxFecha = col('Diario');
   const idxVentas = col('Cnt POS');
@@ -245,6 +246,7 @@ export async function cargarDatos(cacheKey = "") {
   }
 
   const records: any[] = [];
+  const mermasDiarias: any[] = [];
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     if (!row || !row[idxProd] || !row[idxTienda] || !row[idxSemana]) continue;
@@ -285,6 +287,17 @@ export async function cargarDatos(cacheKey = "") {
       rec[`vtas_${d.toLowerCase()}`] = idxVtas[d] >= 0 ? sv(row[idxVtas[d]]) : 0;
     }
     records.push(rec);
+    if (rec.merma_u > 0) {
+      mermasDiarias.push({
+        fecha: rec.fecha,
+        fecha_ymd: rec.fecha_ymd,
+        serie: row[idxNumTienda] ? String(row[idxNumTienda]).trim() : '',
+        tienda: rec.tienda,
+        producto: rec.producto,
+        merma_u: rec.merma_u,
+        retail_vc: rec.retail_vc
+      });
+    }
   }
 
   const semanas = Array.from(new Set(records.map(r => r.semana))).sort((a: any, b: any) => a - b);
@@ -710,6 +723,7 @@ export async function cargarDatos(cacheKey = "") {
     totales_prod_tienda: totalesProdTienda,
     resumen_diario: resumenDiario,
     resumen_has_field1: idxField1 >= 0,
+    mermas_diarias: mermasDiarias,
     inventario_por_tienda: inventarioPorTienda,
     inventario_por_producto: inventarioPorProducto,
     detalle_inventario: detalleInventario,

@@ -21,3 +21,9 @@ Thumbs.db
 
 
 nul
+
+# Docker files (local only)
+Dockerfile
+docker-compose.yml
+.dockerignore
+render.yaml

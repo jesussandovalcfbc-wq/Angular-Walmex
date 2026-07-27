@@ -254,16 +254,83 @@ function openChoferesSubTab(tab) {
     // Mostrar el sub-panel correcto
     var panelCons = document.getElementById('subPanelConsolidado');
     var panelDev  = document.getElementById('subPanelDevoluciones');
+    var panelMerm = document.getElementById('subPanelMermas');
+    
+    if (panelCons) panelCons.style.display = 'none';
+    if (panelDev)  panelDev.style.display  = 'none';
+    if (panelMerm) panelMerm.style.display = 'none';
+    
     if (tab === 'consolidado') {
         if (panelCons) panelCons.style.display = 'block';
-        if (panelDev)  panelDev.style.display  = 'none';
+    } else if (tab === 'mermas') {
+        if (panelMerm) panelMerm.style.display = 'block';
+        if (typeof renderMermas === 'function') renderMermas();
     } else {
-        if (panelCons) panelCons.style.display = 'none';
         if (panelDev)  panelDev.style.display  = 'block';
-        renderDevoluciones();
+        if (typeof renderDevoluciones === 'function') renderDevoluciones();
     }
 }
 
+
+
+
+function renderMermas() {
+    var tbody = document.getElementById('mermasTbody');
+    if (!tbody) return;
+    
+    var arr = (typeof DATA !== 'undefined' && DATA && DATA.mermas_diarias) ? DATA.mermas_diarias : [];
+    
+    var desde   = (document.getElementById('mermaDesde')   || {}).value || '';
+    var hasta   = (document.getElementById('mermaHasta')   || {}).value || '';
+    var serieF  = ((document.getElementById('mermaSerieFilter')  || {}).value || '').toLowerCase().trim();
+    var tiendaF = ((document.getElementById('mermaTiendaFilter') || {}).value || '').toLowerCase().trim();
+    var florF   = ((document.getElementById('mermaFlorFilter')   || {}).value || '').toLowerCase().trim();
+
+    var totalPiezas = 0;
+    var totalMonto = 0;
+    var rows = '';
+
+    arr.sort(function(a,b) { return (a.fecha_ymd > b.fecha_ymd ? -1 : (a.fecha_ymd < b.fecha_ymd ? 1 : 0)); });
+
+    for (var i = 0; i < arr.length; i++) {
+        var item = arr[i];
+        var itemFechaYmd = (item.fecha_ymd || '').replace(/\//g, '-');
+        
+        if (desde && itemFechaYmd && itemFechaYmd < desde) continue;
+        if (hasta && itemFechaYmd && itemFechaYmd > hasta) continue;
+        if (serieF && (item.serie || '').toLowerCase().indexOf(serieF) === -1) continue;
+        if (tiendaF && (item.tienda || '').toLowerCase().indexOf(tiendaF) === -1) continue;
+        if (florF && (item.producto || '').toLowerCase().indexOf(florF) === -1) continue;
+
+        var mu = parseFloat(item.merma_u || 0);
+        var mr = parseFloat(item.retail_vc || 0);
+        
+        if (mu > 0) {
+            totalPiezas += mu;
+            totalMonto += mr;
+            rows += '<tr>' +
+                '<td>' + (item.fecha || itemFechaYmd || '') + '</td>' +
+                '<td>' + (item.serie || '-') + '</td>' +
+                '<td>' + (item.tienda || '-') + '</td>' +
+                '<td>' + (item.producto || '-') + '</td>' +
+                '<td class="text-end">' + mu.toLocaleString('en-US') + '</td>' +
+                '<td class="text-end">$' + mr.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) + '</td>' +
+                '</tr>';
+        }
+    }
+
+    if (!rows) {
+        rows = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#aaa;">Sin mermas en el rango/filtros seleccionados</td></tr>';
+    }
+    
+    tbody.innerHTML = rows;
+    
+    var elP = document.getElementById('mermaTotalPiezas');
+    if (elP) elP.textContent = totalPiezas.toLocaleString('en-US');
+    
+    var elM = document.getElementById('mermaTotalMonto');
+    if (elM) elM.textContent = '$' + totalMonto.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
 
 
 function renderDevoluciones() {
@@ -297,9 +364,18 @@ function renderDevoluciones() {
         var badgeColor = isVerified ? '#198754' : '#dc3545';
         var badgeIcon = isVerified ? 'fa-check' : 'fa-xmark';
         var badgeText = isVerified ? 'Verificado' : 'No verificado';
-        rows += '<tr id="'+rowId+'" data-devolucion-id="'+devolucionId+'" class="'+rowClass+'">' +
+        
+          var fFactura = '-';
+          if (typeof DATABASE_DATA !== 'undefined' && Array.isArray(DATABASE_DATA)) {
+              var matchFact = DATABASE_DATA.find(function(f) { return String(f.folio) === String(r.folio); });
+              if (matchFact && matchFact.diario) {
+                  fFactura = matchFact.diario.substring(0, 10);
+              }
+          }
+rows += '<tr id="'+rowId+'" data-devolucion-id="'+devolucionId+'" class="'+rowClass+'">' +
             '<td>'+fechaDisp+'</td>' +
-            '<td>'+( r.folio || '-')+'</td>' +
+                          '<td>'+fFactura+'</td>' +
+              '<td>'+( r.folio || '-')+'</td>' +
             '<td>'+( r.serie || '-')+'</td>' +
             '<td>'+( r.producto || '-')+'</td>' +
             '<td class="text-end">'+cant.toLocaleString('en-US')+'</td>' +
@@ -309,7 +385,7 @@ function renderDevoluciones() {
             '<td class="text-center"><div id="badge_'+rowId+'" data-verified="'+isVerified+'" class="dev-verify-badge" onclick="if(typeof window.toggleDevVerified===\'function\') window.toggleDevVerified(\''+rowId+'\')" style="display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:4px; font-size:11px; font-weight:600; cursor:pointer; background:'+badgeColor+'; color:#fff; border:none; transition:all 0.2s; user-select:none;"><i class="fa-solid '+badgeIcon+'"></i> '+badgeText+'</div></td>' +
             '</tr>';
     });
-    tbody.innerHTML = rows || '<tr><td colspan="9" style="text-align:center; padding:20px; color:#aaa;">Sin devoluciones en el rango seleccionado</td></tr>';
+    tbody.innerHTML = rows || '<tr><td colspan="10" style="text-align:center; padding:20px; color:#aaa;">Sin devoluciones en el rango seleccionado</td></tr>';
     var el; 
     el = document.getElementById('devTotalCount');   if(el) el.textContent = totalCount;
     el = document.getElementById('devTotalUnidades'); if(el) el.textContent = totalUnid.toLocaleString('en-US');
