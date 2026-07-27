@@ -280,6 +280,23 @@ function renderMermas() {
     
     var arr = (typeof DATA !== 'undefined' && DATA && DATA.mermas_diarias) ? DATA.mermas_diarias : [];
     
+    var selSerie = document.getElementById('mermaSerieFilter');
+    var selTienda = document.getElementById('mermaTiendaFilter');
+    var selFlor = document.getElementById('mermaFlorFilter');
+
+    if (arr.length > 0 && selSerie && selSerie.options.length <= 1) {
+        var series = {}; var tiendas = {}; var flores = {};
+        for(var i=0; i<arr.length; i++) {
+            if(arr[i].serie) series[arr[i].serie] = true;
+            if(arr[i].tienda) tiendas[arr[i].tienda] = true;
+            if(arr[i].producto) flores[arr[i].producto] = true;
+        }
+        var sortKeys = function(obj) { return Object.keys(obj).sort(); };
+        sortKeys(series).forEach(function(k) { selSerie.add(new Option(k, k)); });
+        sortKeys(tiendas).forEach(function(k) { selTienda.add(new Option(k, k)); });
+        sortKeys(flores).forEach(function(k) { selFlor.add(new Option(k, k)); });
+    }
+
     var desde   = (document.getElementById('mermaDesde')   || {}).value || '';
     var hasta   = (document.getElementById('mermaHasta')   || {}).value || '';
     var serieF  = ((document.getElementById('mermaSerieFilter')  || {}).value || '').toLowerCase().trim();
