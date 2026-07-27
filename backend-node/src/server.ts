@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -22,6 +23,14 @@ import { uploadExcelToSharepoint } from './sharepoint';
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+
+// En produccion (Docker/VPS), servir los archivos estaticos de Angular
+const isProduction = process.env.NODE_ENV === 'production';
+const publicDir = path.join(__dirname, '..', 'public');
+if (isProduction) {
+  app.use(express.static(publicDir));
+  console.log('Serving Angular static files from: ' + publicDir);
+}
 
 let GLOBAL_DATA: any = null;
 let uploadInProgress = false;
@@ -342,6 +351,13 @@ app.post('/api/upload-excel', async (req, res) => {
     uploadInProgress = false;
   }
 });
+
+// Fallback para Angular Router: cualquier ruta no-API devuelve index.html
+if (isProduction) {
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(publicDir, 'index.html'));
+  });
+}
 
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => {

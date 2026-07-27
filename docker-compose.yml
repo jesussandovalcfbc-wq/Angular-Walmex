@@ -1,0 +1,11 @@
+services:
+  walmex-app:
+    build: .
+    container_name: walmex
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
