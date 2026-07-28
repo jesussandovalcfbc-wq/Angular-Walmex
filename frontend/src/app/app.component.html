@@ -213,6 +213,20 @@
 <tbody id="tInvProducto"></tbody>
 </table>
 </div>
+<div class="box" style="overflow-x:auto; margin-top:20px;">
+<div class="box-hdr" style="background:#e0f2fe; color:#0369a1; border-bottom:1px solid #bae6fd;"><i class="fa-solid fa-snowflake" style="color:#0ea5e9; margin-right:4px;"></i> Cuarto Frío — Tiendas</div>
+<table class="t">
+<thead id="tCfTiendaHead"></thead>
+<tbody id="tCfTienda"></tbody>
+</table>
+</div>
+<div class="box" style="overflow-x:auto; margin-top:20px;">
+<div class="box-hdr" id="cfProductoTitle" style="background:#e0f2fe; color:#0369a1; border-bottom:1px solid #bae6fd;"><i class="fa-solid fa-snowflake" style="color:#0ea5e9; margin-right:4px;"></i> Cuarto Frío — Productos</div>
+<table class="t">
+<thead id="tCfProductoHead"></thead>
+<tbody id="tCfProducto"></tbody>
+</table>
+</div>
 </div>
 <!-- Vista GASTO -->
 <div id="viewGasto" style="display:none; overflow:visible !important; height:auto !important;">
@@ -509,6 +523,7 @@
 
 <button class="mode-btn active" id="btnPivotProducto" onclick="setResumenPivot('producto')">Producto</button>
 <button class="mode-btn" id="btnPivotTienda" onclick="setResumenPivot('tienda')">Tienda</button>
+<button class="mode-btn" id="btnToggleCuartoFrio" onclick="toggleCuartoFrio()" style="margin-left:10px; background-color:#e0f2fe; color:#0369a1; border-color:#bae6fd;"><i class="fa-solid fa-snowflake" style="color:#0ea5e9;"></i> Cuarto Frío</button>
 <button class="mode-btn" id="btnResumenAnalisis" onclick="openResumenAnalisisTab()">Análisis</button>
 </div>
 <div style="margin-left:auto; display:flex; gap:5px; align-items:center;">

@@ -1,3 +1,10 @@
+function promptGroqKey() {
+    var newKey = window.prompt("Ingresa tu nueva API Key de Groq:");
+    if (newKey && newKey.trim() !== "") {
+        localStorage.setItem('GROQ_API_KEY', newKey.trim());
+        alert("¡Clave de Groq actualizada correctamente!");
+    }
+}
 
 window.syncFilter = function(el, targetId) {
     var targetEl = document.getElementById(targetId);
@@ -408,7 +415,7 @@ rows += '<tr id="'+rowId+'" data-devolucion-id="'+devolucionId+'" class="'+rowCl
     el = document.getElementById('devTotalUnidades'); if(el) el.textContent = totalUnid.toLocaleString('en-US');
     el = document.getElementById('devTotalMonto');   if(el) el.textContent = '$'+totalMonto.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
-var state = { semana: null, semanas_sel: null, tienda: null, tiendas_sel: null, producto: null, productos_sel: null, view: 'producto', tiendaT: null, invMode: null, invSelected: null, invSubTab: 'inventario', compMode: 'semanas', drillSem: null, drillTienda: null, resumenMode: 'semanas', resumenPivot: 'tienda', reabastoWindow: 3 };
+var state = { semana: null, semanas_sel: null, tienda: null, tiendas_sel: null, producto: null, productos_sel: null, view: 'producto', tiendaT: null, invMode: null, invSelected: null, invSubTab: 'inventario', compMode: 'semanas', drillSem: null, drillTienda: null, resumenMode: 'semanas', resumenPivot: 'tienda', reabastoWindow: 3, showCuartoFrio: false };
 var DIAS  = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
 var MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 
@@ -1026,7 +1033,9 @@ function getTiendasActivas(){
 
 function updateResumenModeButtons(){
   var titleText = document.getElementById('resumenTitleText');
-  if(titleText) titleText.textContent = 'Resumen Semanal';
+  if(titleText) {
+      titleText.innerHTML = '';
+  }
 }
 
 function setResumenMode(mode){
@@ -1832,6 +1841,104 @@ function renderInventario(){
   document.getElementById('invProductoTitle').innerHTML = title;
   document.getElementById('tInvProducto').innerHTML = rowsProducto;
 
+
+  // ── Cuarto Frio ──
+  var cfDet = DATA.detalle_cuartofrio;
+  if(!cfDet || !cfDet.fechas || cfDet.fechas.length === 0){
+    if(document.getElementById('tCfTiendaHead')) document.getElementById('tCfTiendaHead').innerHTML = '<tr><th colspan="2">Sin datos en hoja Detalle</th></tr>';
+    if(document.getElementById('tCfTienda')) document.getElementById('tCfTienda').innerHTML = '';
+    if(document.getElementById('tCfProductoHead')) document.getElementById('tCfProductoHead').innerHTML = '<tr><th colspan="2">Sin datos en hoja Detalle</th></tr>';
+    if(document.getElementById('tCfProducto')) document.getElementById('tCfProducto').innerHTML = '';
+    if(document.getElementById('cfProductoTitle')) document.getElementById('cfProductoTitle').innerHTML = '<i class="fa-solid fa-snowflake" style="color:#0ea5e9; margin-right:4px;"></i> Cuarto Frío — Productos';
+  } else {
+    var cfData = cfDet.data;
+    var cfTiendas = Object.keys(cfData).sort();
+    var cfFechas = fechas; // usar mismas fechas de la tabla superior
+    
+    if(document.getElementById('tCfTiendaHead')) document.getElementById('tCfTiendaHead').innerHTML = buildHead('Tienda');
+    if(document.getElementById('tCfProductoHead')) document.getElementById('tCfProductoHead').innerHTML = buildHead('Producto');
+    
+    var cfProdSet = {};
+    cfTiendas.forEach(function(t){
+      Object.keys(cfData[t]).forEach(function(p){ cfProdSet[p] = true; });
+    });
+    var cfProds = Object.keys(cfProdSet).sort();
+    
+    var cfRowsTienda = '';
+    var cfTotT = cfFechas.map(function(){ return 0; });
+    var cfGrandTotT = 0;
+    
+    cfTiendas.forEach(function(t){
+      var vals = cfFechas.map(function(f){
+        var total = 0;
+        Object.keys(cfData[t]).forEach(function(p){
+          total += (cfData[t][p][f] || 0);
+        });
+        return total;
+      });
+      var rowTotal = vals.reduce(function(s,v){ return s+v; }, 0);
+      if(rowTotal > 0){
+        vals.forEach(function(v,i){ cfTotT[i] += v; });
+        cfGrandTotT += rowTotal;
+        var sel = (state.invMode==='tienda' && state.invSelected===t);
+        var st2 = sel ? ' style="background:#e8f0fe;font-weight:700;cursor:pointer"' : ' style="cursor:pointer"';
+        var escapedT = t.split("'").join("\\\\'");
+        cfRowsTienda += "<tr" + st2 + " onclick='selInvTienda(\"" + escapedT + "\")'><td>" + t + "</td>";
+        vals.forEach(function(v){ cfRowsTienda += q(v); });
+        cfRowsTienda += q(rowTotal);
+        cfRowsTienda += '</tr>';
+      }
+    });
+    if (cfGrandTotT > 0) {
+      cfRowsTienda += '<tr class="total"><td>Total</td>';
+      cfTotT.forEach(function(v){ cfRowsTienda += q(v); });
+      cfRowsTienda += q(cfGrandTotT);
+      cfRowsTienda += '</tr>';
+    }
+    if(document.getElementById('tCfTienda')) document.getElementById('tCfTienda').innerHTML = cfRowsTienda;
+    
+    var cfRowsProducto = '';
+    var cfTotP = cfFechas.map(function(){ return 0; });
+    var cfGrandTotP = 0;
+    var cfTitle = '<i class="fa-solid fa-snowflake" style="color:#0ea5e9; margin-right:4px;"></i> Cuarto Frío — Productos';
+    var cfFiltro = (state.invMode==='tienda' && state.invSelected) ? [state.invSelected] : cfTiendas;
+    
+    if(state.invMode==='tienda' && state.invSelected){
+      cfTitle = '<i class="fa-solid fa-snowflake" style="color:#0ea5e9; margin-right:4px;"></i> Cuarto Frío — '+state.invSelected.replace('SC ','')+
+        ' <button onclick="limpiarInvFiltro()" style="margin-left:8px;padding:2px 6px;background:#999;color:white;border:none;border-radius:3px;cursor:pointer;font-size:.65rem">✕</button>';
+    }
+    
+    cfProds.forEach(function(p){
+      var vals = cfFechas.map(function(f){
+        var total = 0;
+        cfFiltro.forEach(function(t){
+          if(cfData[t] && cfData[t][p]){
+            total += (cfData[t][p][f] || 0);
+          }
+        });
+        return total;
+      });
+      var rowTotal = vals.reduce(function(s,v){ return s+v; }, 0);
+      if(rowTotal > 0){
+        vals.forEach(function(v,i){ cfTotP[i] += v; });
+        cfGrandTotP += rowTotal;
+        cfRowsProducto += '<tr><td>'+p.replace('BQT ','')+'</td>';
+        vals.forEach(function(v){ cfRowsProducto += q(v); });
+        cfRowsProducto += q(rowTotal);
+        cfRowsProducto += '</tr>';
+      }
+    });
+    if (cfGrandTotP > 0) {
+      cfRowsProducto += '<tr class="total"><td>Total</td>';
+      cfTotP.forEach(function(v){ cfRowsProducto += q(v); });
+      cfRowsProducto += q(cfGrandTotP);
+      cfRowsProducto += '</tr>';
+    }
+    
+    if(document.getElementById('cfProductoTitle')) document.getElementById('cfProductoTitle').innerHTML = cfTitle;
+    if(document.getElementById('tCfProducto')) document.getElementById('tCfProducto').innerHTML = cfRowsProducto;
+  }
+
   document.querySelectorAll('#viewInventario > .box').forEach(function(box){
     var header = box.querySelector(':scope > .box-hdr');
     var table = box.querySelector(':scope > table');
@@ -2291,279 +2398,299 @@ function roundUpToMultiple(qty, multiple){
    No escribe en Capture SEM ni en Neon: solamente calcula una referencia
    auditable para que el usuario decida si la captura manualmente. */
 function buildProgramacionIaSuggestion(producto, tienda, selectedWeeks, dayGroups){
-  var resumen = DATA.resumen_diario || {};
-  var storeData = resumen[tienda] || {};
-  var requestedWeeks = (selectedWeeks || []).map(function(week){ return String(week); }).sort(function(a,b){
-    return (parseInt(a,10)||0)-(parseInt(b,10)||0);
-  });
-  if(!requestedWeeks.length) return null;
-
-  function weekNumber(raw){
-    var n = parseInt(String(raw || ''),10) || 0;
-    return n > 9999 ? n % 100 : n;
-  }
-  function weekSerial(raw){
-    var n = parseInt(String(raw || ''),10) || 0;
-    if(n > 9999) return n;
-    if(n >= 1000) return (2000 + Math.floor(n/100))*100 + (n%100);
-    var ref = parseInt(requestedWeeks[requestedWeeks.length-1],10) || 0;
-    var year = ref > 9999 ? Math.floor(ref/100) : new Date().getFullYear();
-    return year*100+n;
-  }
-  var referenceWeek = requestedWeeks[requestedWeeks.length-1];
-  var referenceSerial = weekSerial(referenceWeek);
-  var targetWeek = weekNumber(referenceWeek) + 1;
-  /* La semana seleccionada marca el corte, no limita la memoria del modelo.
-     Se buscan automáticamente hasta cuatro semanas con datos reales. */
-  var weeks = Object.keys(storeData).filter(function(week){
-    var productData = ((storeData[week] || {})[producto]) || {};
-    var hasOperationalData = Object.keys(productData).some(function(dateKey){
-      var cell = productData[dateKey] || {};
-      return Number(cell.ventas || 0) > 0 || Number(cell.embarque || 0) > 0;
+    var resumen = DATA.resumen_diario || {};
+    var storeData = resumen[tienda] || {};
+    var requestedWeeks = (selectedWeeks || []).map(function(week){ return String(week); }).sort(function(a,b){
+      return (parseInt(a,10)||0)-(parseInt(b,10)||0);
     });
-    return weekSerial(week) <= referenceSerial && hasOperationalData;
-  }).sort(function(a,b){ return weekSerial(a)-weekSerial(b); }).slice(-4);
-  if(!weeks.length) return null;
-  var byDow = [[],[],[],[],[],[],[]];
-  var ventasPorFecha = {};
-  var weekStats = {};
-  var totalSales = 0;
-  var totalShipments = 0;
-  var shipmentDowStats = [0,1,2,3,4,5,6].map(function(){ return {weeks:0, qty:0}; });
-  var shipmentDaysPerWeek = [];
-
-  /* Venta histórica de las semanas seleccionadas. La media se calcula por
-     día de la semana, así una semana en progreso no convierte días futuros en 0. */
-  weeks.forEach(function(week, weekIndex){
-    var productData = ((storeData[week] || {})[producto]) || {};
-    var stat = {sales:0, shipments:0, days:0, byDow:[0,0,0,0,0,0,0], dows:{}, shipmentDows:{}};
-    Object.keys(productData).forEach(function(dateKey){
-      var cell = productData[dateKey] || {};
-      var dt = parseResumenDate(dateKey);
-      if(!dt) return;
-      var sales = Number(cell.ventas || 0);
-      var shipments = Number(cell.embarque || 0);
-      byDow[dt.getDay()].push({value:sales, recency:weekIndex});
-      ventasPorFecha[dateKey] = sales;
-      totalSales += sales;
-      totalShipments += shipments;
-      stat.sales += sales;
-      stat.shipments += shipments;
-      if(shipments > 0){
-        stat.shipmentDows[dt.getDay()] = true;
-        shipmentDowStats[dt.getDay()].qty += shipments;
-      }
-      stat.byDow[dt.getDay()] += sales;
-      if(!stat.dows[dt.getDay()]){
-        stat.dows[dt.getDay()] = true;
-        stat.days += 1;
-      }
-    });
-    var shipmentDowsThisWeek = Object.keys(stat.shipmentDows).map(function(dow){ return Number(dow); });
-    if(shipmentDowsThisWeek.length){
-      shipmentDaysPerWeek.push(shipmentDowsThisWeek.length);
-      shipmentDowsThisWeek.forEach(function(dow){ shipmentDowStats[dow].weeks += 1; });
+    if(!requestedWeeks.length) return null;
+  
+    function weekNumber(raw){
+      var n = parseInt(String(raw || ''),10) || 0;
+      return n > 9999 ? n % 100 : n;
     }
-    weekStats[week] = stat;
-  });
+    function weekSerial(raw){
+      var n = parseInt(String(raw || ''),10) || 0;
+      if(n > 9999) return n;
+      if(n >= 1000) return (2000 + Math.floor(n/100))*100 + (n%100);
+      var ref = parseInt(requestedWeeks[requestedWeeks.length-1],10) || 0;
+      var year = ref > 9999 ? Math.floor(ref/100) : new Date().getFullYear();
+      return year*100+n;
+    }
+    
+    // Detectar la semana ACTUAL (móxima en la base de datos) sin importar el filtro del usuario
+        // --- LLM OVERRIDE START ---
+          var geminiOverride = (window.geminiBulkSuggestions && window.geminiBulkSuggestions[tienda]) ? window.geminiBulkSuggestions[tienda][producto] : null;
+      if (geminiOverride) {
+          var validDows = [];
+          var reversedWeeks = requestedWeeks.slice().reverse(); // Start from the most recent week
+          for (var i = 0; i < reversedWeeks.length; i++) {
+             var week = reversedWeeks[i];
+             var productData = ((storeData[week] || {})[producto]) || {};
+             var currentWeekDows = [];
+             Object.keys(productData).forEach(function(dateKey){
+                if (Number(productData[dateKey].embarque || 0) > 0) {
+                   var dateObj = new Date(dateKey + 'T12:00:00');
+                   if(isNaN(dateObj.getTime())) dateObj = new Date(dateKey);
+                   var dow = dateObj.getDay();
+                   if(!isNaN(dow) && currentWeekDows.indexOf(dow) === -1) {
+                       currentWeekDows.push(dow);
+                   }
+                }
+             });
+             if (currentWeekDows.length > 0) {
+                 validDows = currentWeekDows; // Clone the exact days of the most recent delivery week!
+                 break;
+             }
+          }
+          if (validDows.length > 2) validDows = validDows.slice(0, 2); // Max 2 days
+          validDows.sort();
+          // Fallback if no history
+          if(validDows.length === 0) validDows = [2, 5]; 
+          // Consolidar en 1 dia si el volumen es pequeño
+          var orderMultiple = typeof getOrderMultiple === 'function' ? getOrderMultiple(producto) : 1;
+          if(geminiOverride.total_sugerido < (2 * orderMultiple) && validDows.length > 1) {
+             validDows = [validDows[0]]; // Solo el primer dia de la ruta
+          }
 
-  var forecastByDow = [0,0,0,0,0,0,0];
-  byDow.forEach(function(observations, dow){
-    if(!observations.length) return;
-    var weighted = 0;
-    var weightSum = 0;
-    observations.forEach(function(obs, index){
-      var weight = index + 1;
-      weighted += obs.value * weight;
-      weightSum += weight;
+          var mappedValues = {};
+          var dCount = validDows.length;
+          var perDay = Math.floor(geminiOverride.total_sugerido / dCount);
+          
+          var dowNames = {0:'Dom',1:'Lun',2:'Mar',3:'Mié',4:'Jue',5:'Vie',6:'Sáb'};
+          var dNames = validDows.map(function(d){ return dowNames[d]; }).join(', ');
+          
+          var remaining = geminiOverride.total_sugerido;
+          validDows.forEach(function(dow, idx){
+              var colIndex = dayGroups.findIndex(function(g){ return g.dow === dow; });
+              if(colIndex !== -1) {
+                  var val = (idx === dCount - 1) ? remaining : perDay;
+                  if(val > 0) mappedValues[colIndex] = val;
+                  remaining -= val;
+              }
+          });
+        
+        var gMaxSem = DATA.semanas && DATA.semanas.length ? Math.max.apply(null, DATA.semanas.map(function(s){ return parseInt(s, 10); })) : 0;
+        var targetW = gMaxSem > 9999 ? gMaxSem % 100 : gMaxSem;
+
+        return {
+          targetWeek: targetW,
+          values: mappedValues,
+          total: geminiOverride.total_sugerido,
+          confidence: "Alta (LLM)",
+          decision: (geminiOverride.decision || "Decisión Gemini") + " (Sugerencia: " + geminiOverride.total_sugerido + " unidades)",
+          explanationLines: [
+              "✨ Sugerencia generada por Gemini AI (LLM).",
+              "Explicación: " + geminiOverride.explicacion,
+              "Cadencia asignada: " + dCount + " viaje(s) en días: " + dNames
+          ],
+          reason: geminiOverride.explicacion
+        };
+    }
+    // --- LLM OVERRIDE END ---
+    return null; // Disable local fallback algorithm
+
+    
+    var globalMaxSem = DATA.semanas && DATA.semanas.length ? Math.max.apply(null, DATA.semanas.map(function(s){ return parseInt(s, 10); })) : 0;
+    var targetWeekFull = globalMaxSem > 0 ? String(globalMaxSem) : requestedWeeks[requestedWeeks.length-1];
+    var targetWeek = weekNumber(targetWeekFull);
+    var targetSerial = weekSerial(targetWeekFull);
+    
+    // Buscar hasta 4 semanas hacia atrás con datos
+    var weeks = Object.keys(storeData).filter(function(week){
+      var productData = ((storeData[week] || {})[producto]) || {};
+      var hasOperationalData = Object.keys(productData).some(function(dateKey){
+        var cell = productData[dateKey] || {};
+        return Number(cell.ventas || 0) > 0 || Number(cell.embarque || 0) > 0;
+      });
+      return weekSerial(week) < targetSerial && hasOperationalData;
+    }).sort(function(a,b){ return weekSerial(a)-weekSerial(b); }).slice(-4);
+    
+    if(!weeks.length) return null;
+    
+    var weekStats = {};
+    var totalSales = 0;
+    var totalShipments = 0;
+    var shipmentDowStats = [0,1,2,3,4,5,6].map(function(){ return {weeks:0, qty:0}; });
+    
+    var totalDeliveryDaysHistorical = 0;
+    var weeksWithDeliveries = 0;
+
+    weeks.forEach(function(week, weekIndex){
+      var productData = ((storeData[week] || {})[producto]) || {};
+      var stat = {sales:0, shipments:0, days:0, dows:{}, shipmentDows:{}};
+      Object.keys(productData).forEach(function(dateKey){
+        var cell = productData[dateKey] || {};
+        var dt = parseResumenDate(dateKey);
+        if(!dt) return;
+        var sales = Number(cell.ventas || 0);
+        var shipments = Number(cell.embarque || 0);
+        
+        totalSales += sales;
+        totalShipments += shipments;
+        stat.sales += sales;
+        stat.shipments += shipments;
+        
+        if(shipments > 0){
+          stat.shipmentDows[dt.getDay()] = true;
+          shipmentDowStats[dt.getDay()].qty += shipments;
+        }
+      });
+      
+      var shipmentDowsThisWeek = Object.keys(stat.shipmentDows).map(function(dow){ return Number(dow); });
+      if(shipmentDowsThisWeek.length){
+        shipmentDowsThisWeek.forEach(function(dow){ shipmentDowStats[dow].weeks += 1; });
+        totalDeliveryDaysHistorical += shipmentDowsThisWeek.length;
+        weeksWithDeliveries++;
+      }
+      weekStats[week] = stat;
     });
-    forecastByDow[dow] = weightSum ? weighted / weightSum : 0;
-  });
 
-  var weeklyForecast = forecastByDow.reduce(function(sum,value){ return sum + value; },0);
-  if(!(weeklyForecast > 0) && !(totalSales > 0)) return null;
-  var observedDays = Object.keys(ventasPorFecha).length;
-  var avgDaily = observedDays ? totalSales / observedDays : 0;
-  var maxDaysForModel = weeks.reduce(function(max,week){ return Math.max(max,(weekStats[week] || {}).days || 0); },0);
-  var completeDemandWeeks = weeks.filter(function(week){ return ((weekStats[week] || {}).days || 0) >= maxDaysForModel; });
-  var weeklySamples = completeDemandWeeks.map(function(week){ return Number((weekStats[week] || {}).sales || 0); });
-  var weeklyMean = weeklySamples.length ? weeklySamples.reduce(function(sum,value){ return sum+value; },0)/weeklySamples.length : weeklyForecast;
-  var weeklyVariance = weeklySamples.length > 1 ? weeklySamples.reduce(function(sum,value){ var diff=value-weeklyMean; return sum+diff*diff; },0)/weeklySamples.length : 0;
-  var weeklyStd = Math.sqrt(weeklyVariance);
-  var preliminaryDeliveryCount = 1;
-  if(shipmentDaysPerWeek.length){
-    var preliminaryCadence = shipmentDaysPerWeek.slice().sort(function(a,b){ return a-b; });
-    preliminaryDeliveryCount = preliminaryCadence[Math.floor((preliminaryCadence.length-1)/2)] || 1;
-  }
-  var targetServiceLevel = 0.95;
-  var serviceZ = 1.645;
-  var safetyDays = getSafetyDays(avgDaily, ventasPorFecha);
-  var fallbackSafety = avgDaily * safetyDays;
-  var safetyQty = weeklySamples.length > 1
-    ? Math.max(avgDaily, serviceZ * weeklyStd * Math.sqrt(1/Math.max(1,preliminaryDeliveryCount)))
-    : fallbackSafety;
-  var sellThru = totalShipments > 0 ? (totalSales / totalShipments) * 100 : null;
-  /* Cuando casi todo lo embarcado se vende, POS puede estar censurado por falta
-     de producto. Se agrega un impulso moderado para proteger ventas potenciales. */
-  var availabilityUpliftPct = sellThru !== null && sellThru >= 90 ? Math.min(0.15, Math.max(0.03,(sellThru-90)/100)) : 0;
-  var availabilityUpliftQty = weeklyForecast * availabilityUpliftPct;
-  var requiredRaw = Math.max(0, weeklyForecast + safetyQty + availabilityUpliftQty);
-  var multiple = getOrderMultiple(producto);
-  var requiredTotal = roundUpToMultiple(requiredRaw, multiple);
-  var statisticalTotal = requiredTotal;
+    // 1. Analizar patrón de entrega (Cadencia Real Promedio)
+    var averageDeliveriesPerWeek = weeksWithDeliveries > 0 ? Math.round(totalDeliveryDaysHistorical / weeksWithDeliveries) : 1;
+    if (averageDeliveriesPerWeek < 1) averageDeliveriesPerWeek = 1;
 
-  var historicalMaxObservedDays = weeks.reduce(function(max,week){
-    return Math.max(max,(weekStats[week] || {}).days || 0);
-  },0);
-  var completeWeeks = weeks.filter(function(week){
-    return ((weekStats[week] || {}).days || 0) >= historicalMaxObservedDays;
-  });
-  var confirmedDeclines = 0;
-  for(var declineIndex = Math.max(1, completeWeeks.length-2); declineIndex < completeWeeks.length; declineIndex++){
-    var beforeSales = Number((weekStats[completeWeeks[declineIndex-1]] || {}).sales || 0);
-    var afterSales = Number((weekStats[completeWeeks[declineIndex]] || {}).sales || 0);
-    if(beforeSales > 0 && afterSales < beforeSales * 0.95) confirmedDeclines += 1;
-  }
-  var sustainedDecline = completeWeeks.length >= 3 && confirmedDeclines >= 2;
+    var rankedDeliveryDays = [0,1,2,3,4,5,6].filter(function(dow){
+      return shipmentDowStats[dow].weeks > 0;
+    }).sort(function(a,b){
+      return shipmentDowStats[b].weeks - shipmentDowStats[a].weeks || shipmentDowStats[b].qty - shipmentDowStats[a].qty;
+    });
+    
+    // Si no hay historial claro, buscamos default
+    if(!rankedDeliveryDays.length) rankedDeliveryDays = (getStoreSchedules()[tienda] || []).slice();
+    if(!rankedDeliveryDays.length){
+      var ruta = (DATA.tienda_ruta && DATA.tienda_ruta[tienda]) || '';
+      rankedDeliveryDays = (getRouteSchedules()[ruta] || []).slice();
+    }
+    if(!rankedDeliveryDays.length) rankedDeliveryDays = [2, 5]; // Default fallback
+    
+    
+    // 2. Analizar tendencia de venta (Ventas Reales vs Embarque)
+    var lastWeek = weeks[weeks.length-1];
+    var prevWeek = weeks.length > 1 ? weeks[weeks.length-2] : null;
+    
+    var lastSales = weekStats[lastWeek].sales;
+    var lastShipments = weekStats[lastWeek].shipments;
+    
+    var prevSales = prevWeek ? weekStats[prevWeek].sales : 0;
+    
+    var salesTrendDesc = '';
+    var decision = '';
+    var confidence = 'Alta';
+    var suggestedTotal = 0;
+    
+    var isDeclining = prevWeek && (lastSales < prevSales);
+    var isOverShipped = lastShipments > lastSales;
+    
+    if (isDeclining && isOverShipped) {
+       suggestedTotal = Math.max(0, lastSales - (lastShipments - lastSales));
+       if (suggestedTotal <= 0 && lastSales > 0) suggestedTotal = Math.floor(lastSales * 0.5); // Min fallback
+       salesTrendDesc = "Tendencia a la baja (" + lastSales + " vs " + prevSales + " pos prev). Se envió más de lo que rotó (" + lastShipments + " emb vs " + lastSales + " pos).";
+       decision = "Frenar sobreinventario";
+       confidence = "Alta";
+    } 
+    else if (isDeclining && !isOverShipped) {
+       suggestedTotal = lastSales; 
+       salesTrendDesc = "Tendencia de venta a la baja. Se igualará el envío estrictamente a la venta reciente (" + lastSales + " pos).";
+       decision = "Ajuste prudente al POS real";
+    }
+    else if (!isDeclining && isOverShipped) {
+       suggestedTotal = lastSales;
+       salesTrendDesc = "Venta estable, pero el último envío fue mayor a la venta real. Se sugiere enviar solo lo que rota (" + lastSales + " unidades).";
+       decision = "Estabilizar envíos";
+    }
+    else {
+       var avg = prevWeek ? ((lastSales + prevSales) / 2) : lastSales;
+       suggestedTotal = Math.ceil(avg * 1.05); // Pequeño extra por crecimiento
+       salesTrendDesc = "Rotación saludable. Venta promedio reciente: " + Math.round(avg) + " unidades.";
+       decision = "Mantener cobertura óptima";
+    }
+    
+    // Si no hubo ventas, no mandar nada.
+    if (totalSales === 0) {
+       suggestedTotal = 0;
+       salesTrendDesc = "Sin ventas históricas registradas.";
+       decision = "Detener envíos (Stock inmovilizado)";
+    }
+    
+    // 3. Ajustar por múltiplos y Consolidación de Cadencia
+    var multiple = getOrderMultiple(producto);
+    suggestedTotal = roundUpToMultiple(Math.max(0, suggestedTotal), multiple);
+    
+    if (suggestedTotal === 0 && totalSales > 0) {
+        suggestedTotal = multiple;
+    }
 
-  var typicalDeliveryCount = preliminaryDeliveryCount;
-  var productDeliveryDays = [0,1,2,3,4,5,6].filter(function(dow){
-    return shipmentDowStats[dow].weeks > 0;
-  }).sort(function(a,b){
-    return shipmentDowStats[b].weeks - shipmentDowStats[a].weeks ||
-      shipmentDowStats[b].qty - shipmentDowStats[a].qty ||
-      forecastByDow[b] - forecastByDow[a];
-  });
-  if(typicalDeliveryCount > 0) productDeliveryDays = productDeliveryDays.slice(0, typicalDeliveryCount);
+    var deliveryCount = averageDeliveriesPerWeek;
+    
+    // *** NUEVA REGLA DE CONSOLIDACIÓN LOGÍSTICA ***
+    // Si la cantidad a enviar es muy pequeña (ej. menor a 2 cajas o menor a 5 pzas), no partirla en varios viajes.
+    var isTooSmallToSplit = suggestedTotal > 0 && suggestedTotal <= (multiple * 2);
+    if (isTooSmallToSplit) {
+        deliveryCount = 1; 
+    }
 
-  var deliveryDays = productDeliveryDays.slice();
-  if(!deliveryDays.length) deliveryDays = (getStoreSchedules()[tienda] || []).slice();
-  if(!deliveryDays.length){
-    var ruta = (DATA.tienda_ruta && DATA.tienda_ruta[tienda]) || '';
-    deliveryDays = (getRouteSchedules()[ruta] || []).slice();
-  }
-  var visibleDows = (dayGroups || []).map(function(group){ return group.dow; }).filter(function(dow){ return dow !== null; });
-  deliveryDays = deliveryDays.filter(function(dow){ return visibleDows.indexOf(dow) >= 0; });
-  if(!deliveryDays.length){
-    deliveryDays = visibleDows.slice().sort(function(a,b){ return forecastByDow[b]-forecastByDow[a]; }).slice(0,2);
-  }
-  if(typicalDeliveryCount > 0 && deliveryDays.length > typicalDeliveryCount){
-    deliveryDays = deliveryDays.slice(0, typicalDeliveryCount);
-  }
+    // Tomar solo los N mejores días según la cadencia calculada (1 o 2 días etc)
+    var deliveryDays = rankedDeliveryDays.slice(0, deliveryCount);
+    
+    var dowNames = {0:'Dom',1:'Lun',2:'Mar',3:'Mié',4:'Jue',5:'Vie',6:'Sáb'};
+    var dayNames = deliveryDays.map(function(d){ return dowNames[d]; }).join(', ');
 
-  var deliveryForecast = deliveryDays.reduce(function(sum,dow){ return sum + (forecastByDow[dow] || 0); },0);
-  var allocations = {};
-  var allocated = 0;
-  deliveryDays.forEach(function(dow,index){
-    var qty;
-    if(index === deliveryDays.length-1){
-      qty = Math.max(0, requiredTotal - allocated);
+    // 4. Repartir el total sugerido en los días de entrega seleccionados
+    var mappedValues = {};
+    if(suggestedTotal > 0){
+      var perDay = Math.floor(suggestedTotal / deliveryCount);
+      var remainder = suggestedTotal - (perDay * deliveryCount);
+      
+      var dayAmounts = deliveryDays.map(function(){ return 0; });
+      var remainingToAssign = suggestedTotal;
+      for (var k=0; k<deliveryDays.length; k++) {
+          if (k === deliveryDays.length - 1) {
+              dayAmounts[k] = remainingToAssign;
+          } else {
+              var assign = roundUpToMultiple(perDay, multiple);
+              if (assign > remainingToAssign) assign = remainingToAssign;
+              dayAmounts[k] = assign;
+              remainingToAssign -= assign;
+          }
+      }
+      
+      deliveryDays.forEach(function(dow, idx){
+        var colIndex = dayGroups.findIndex(function(g){ return g.dow === dow; });
+        if(colIndex !== -1 && dayAmounts[idx] > 0){
+          mappedValues[colIndex] = dayAmounts[idx];
+        }
+      });
+    }
+
+    var lines = [
+      salesTrendDesc
+    ];
+    if (isTooSmallToSplit && averageDeliveriesPerWeek > 1) {
+        lines.push("Frecuencia ajustada: El volumen es bajo (" + suggestedTotal + "), se consolidó todo en 1 viaje el día más fuerte (" + dayNames + ") por eficiencia.");
     } else {
-      var share = deliveryForecast > 0 ? (forecastByDow[dow] || 0) / deliveryForecast : 1 / deliveryDays.length;
-      qty = multiple > 1 ? Math.round((requiredTotal * share) / multiple) * multiple : Math.round(requiredTotal * share);
-      qty = Math.max(0, qty);
-      allocated += qty;
+        lines.push("Frecuencia histórica: " + deliveryCount + " entrega(s) por semana (" + dayNames + ").");
     }
-    allocations[dow] = qty;
-  });
 
-  var backtestError = 0;
-  var backtestActual = 0;
-  for(var testIndex=1; testIndex<weeks.length; testIndex++){
-    var actualTest = weekStats[weeks[testIndex]] || {byDow:[],dows:{}};
-    Object.keys(actualTest.dows || {}).forEach(function(dowKey){
-      var priorValues = weeks.slice(0,testIndex).map(function(week){ return Number((weekStats[week] || {}).byDow[dowKey] || 0); });
-      if(!priorValues.length) return;
-      var predicted = priorValues.reduce(function(sum,value){ return sum+value; },0)/priorValues.length;
-      var actual = Number(actualTest.byDow[dowKey] || 0);
-      backtestError += Math.abs(actual-predicted);
-      backtestActual += actual;
-    });
-  }
-  var forecastWape = backtestActual > 0 ? (backtestError/backtestActual)*100 : null;
-  var nonZeroDaily = Object.keys(ventasPorFecha).map(function(key){ return Number(ventasPorFecha[key] || 0); }).filter(function(value){ return value > 0; });
-  var dailyMean = nonZeroDaily.length ? nonZeroDaily.reduce(function(sum,value){ return sum+value; },0)/nonZeroDaily.length : 0;
-  var dailyVariance = nonZeroDaily.length > 1 ? nonZeroDaily.reduce(function(sum,value){ var diff=value-dailyMean; return sum+diff*diff; },0)/nonZeroDaily.length : 0;
-  var demandAdi = nonZeroDaily.length ? observedDays/nonZeroDaily.length : 99;
-  var demandCv2 = dailyMean > 0 ? dailyVariance/(dailyMean*dailyMean) : 99;
-  var demandPattern = demandAdi < 1.32 ? (demandCv2 < 0.49 ? 'estable' : 'errático') : (demandCv2 < 0.49 ? 'intermitente' : 'irregular');
-  /* Sin conteo físico la confianza máxima es media; WAPE evita presentar como
-     segura una recomendación cuyo historial ha sido difícil de pronosticar. */
-  var confidence = weeks.length >= 3 && observedDays >= 14 && (forecastWape === null || forecastWape <= 35) ? 'Media' : 'Baja';
-  var weekLabels = weeks.map(function(week){ return resumenSemLabel(week); });
-  var reasonParts = [];
-  var explanationLines = [];
-  var maxObservedDays = historicalMaxObservedDays;
-  var latestWeek = weeks[weeks.length-1];
-  var previousWeek = weeks.length > 1 ? weeks[weeks.length-2] : null;
-  var latestStat = weekStats[latestWeek] || {sales:0,days:0,byDow:[]};
-  var partialMessage = '';
-  if(latestStat.days < maxObservedDays){
-    partialMessage = 'La semana '+resumenSemLabel(latestWeek)+' está en progreso ('+latestStat.days+' de '+maxObservedDays+' días con información); los días faltantes no se tomaron como ventas en cero.';
-  }
-  var movementSummary = 'No hay una semana anterior comparable suficiente para afirmar una tendencia.';
-  if(previousWeek){
-    var previousStat = weekStats[previousWeek] || {sales:0,byDow:[]};
-    var previousComparable = 0;
-    Object.keys(latestStat.dows || {}).forEach(function(dow){ previousComparable += Number(previousStat.byDow[dow] || 0); });
-    var currentComparable = latestStat.sales || 0;
-    var movementPct = previousComparable > 0 ? ((currentComparable-previousComparable)/previousComparable)*100 : null;
-    if(movementPct !== null){
-      var movementLabel = movementPct > 5 ? 'subieron' : movementPct < -5 ? 'bajaron' : 'se mantuvieron';
-      movementSummary = 'Las ventas POS '+movementLabel+' '+Math.abs(movementPct).toFixed(1)+'% contra la semana '+resumenSemLabel(previousWeek)+', comparando únicamente los mismos días.';
-    } else if(currentComparable > 0){
-      movementSummary = 'Se detectó venta nueva frente a la semana '+resumenSemLabel(previousWeek)+'.';
+    if(suggestedTotal > 0){
+      lines.push("Se sugieren " + suggestedTotal + " unidades distribuidas en " + deliveryCount + " día(s) para maximizar la venta real.");
+    } else {
+      lines.push("Se recomienda NO enviar producto esta semana hasta depurar la rotación.");
     }
+  
+    return {
+      targetWeek: targetWeek,
+      values: mappedValues,
+      total: suggestedTotal,
+      confidence: confidence,
+      decision: decision + ' (Sugerencia: ' + suggestedTotal + ' unidades)',
+      explanationLines: lines,
+      reason: lines.join(' - ')
+    };
   }
-  var dayNames = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
-  var cadenceText = typicalDeliveryCount > 0
-    ? typicalDeliveryCount+' entrega'+(typicalDeliveryCount === 1 ? '' : 's')+' por semana ('+deliveryDays.map(function(dow){ return dayNames[dow]; }).join(' y ')+')'
-    : 'cadencia tomada del calendario operativo disponible';
-  var formulaText = 'Pronóstico POS '+Math.round(weeklyForecast)+' + protección de servicio '+Math.round(safetyQty)+(availabilityUpliftQty > 0 ? ' + oportunidad de venta '+Math.round(availabilityUpliftQty) : '')+' = sugerencia '+requiredTotal+' unidades.';
-  var sellThruText = sellThru !== null
-    ? 'Sell thru histórico '+sellThru.toFixed(1)+'%: '+(sellThru >= 90 ? 'la rotación es fuerte y conviene proteger disponibilidad.' : sellThru >= 75 ? 'la rotación es saludable; se recomienda ajustar con prudencia.' : 'la rotación es baja; existe margen para reducir, pero de forma gradual.')
-    : 'No hay embarques suficientes para calcular sell thru; la recomendación se apoya principalmente en ventas POS.';
-  var decisionType = requiredTotal > 0 ? 'Enviar '+requiredTotal+' unidades' : 'Sin envío adicional';
-  var decisionText = requiredTotal > 0
-    ? 'Se recomiendan '+requiredTotal+' unidades para alcanzar un nivel de servicio objetivo de '+Math.round(targetServiceLevel*100)+'% y proteger la oportunidad de venta.'
-    : 'No existe demanda POS suficiente en el historial para generar una reposición automática; requiere revisión manual.';
-  explanationLines.push('Datos analizados: '+weeks.length+' semanas con operación real ('+weekLabels.join(', ')+'). Las semanas o plantillas totalmente en cero fueron excluidas.');
-  if(partialMessage) explanationLines.push(partialMessage);
-  explanationLines.push(
-    movementSummary,
-    'Patrón de demanda: '+demandPattern+(forecastWape !== null ? ' · error histórico WAPE '+forecastWape.toFixed(1)+'%' : '')+'.',
-    formulaText,
-    'No se descontó inventario supuesto: al no existir conteo físico, Embarque se usa para medir rotación y frecuencia, no como saldo disponible.',
-    sellThruText,
-    'Distribución sugerida: '+cadenceText+'.',
-    decisionText
-  );
-  reasonParts = explanationLines.slice();
-
-  return {
-    targetWeek: targetWeek,
-    values: (dayGroups || []).map(function(group){
-      return group.dow === null ? requiredTotal : Number(allocations[group.dow] || 0);
-    }),
-    total: requiredTotal,
-    forecast: weeklyForecast,
-    inventory: null,
-    safety: safetyQty,
-    sellThru: sellThru,
-    confidence: confidence,
-    decision: decisionType,
-    explanationLines: explanationLines,
-    statisticalTotal: statisticalTotal,
-    targetServiceLevel: targetServiceLevel,
-    forecastWape: forecastWape,
-    demandPattern: demandPattern,
-    availabilityUplift: availabilityUpliftQty,
-    reason: reasonParts.join(' · ')
-  };
-}
-
-/* Interruptor temporal: conservar la lógica lista para reactivarla sin mostrarla. */
-var PROGRAMACION_IA_ENABLED = false;
+  
+  /* Interruptor temporal: conservar la lógica lista para reactivarla sin mostrarla. */
+var PROGRAMACION_IA_ENABLED = true;
 
 function renderProgramacionIaReasonPanel(items){
   var host = document.getElementById('programacionIaReasons');
@@ -4174,6 +4301,23 @@ function setResumenPivot(mode) {
   renderResumen();
 }
 
+window.toggleCuartoFrio = function() {
+  state.showCuartoFrio = !state.showCuartoFrio;
+  var btn = document.getElementById('btnToggleCuartoFrio');
+  if(btn) {
+      if(state.showCuartoFrio) {
+          btn.style.backgroundColor = '#38bdf8';
+          btn.style.color = '#ffffff';
+          btn.innerHTML = '<i class="fa-solid fa-snowflake"></i> Cuarto Frío';
+      } else {
+          btn.style.backgroundColor = '#e0f2fe';
+          btn.style.color = '#0369a1';
+          btn.innerHTML = '<i class="fa-solid fa-snowflake" style="color:#0ea5e9;"></i> Cuarto Frío';
+      }
+  }
+  if(state.view === 'resumen') renderResumen();
+};
+
 function collectResumenPivot(mode){
   var sems = getSemanasActivas().map(function(s){ return String(s); });
   var tiendas = getTiendasActivas();
@@ -4277,7 +4421,7 @@ function collectResumenPivot(mode){
   };
 }
 function _getMaxGlobalWeek() {
-  var globalMaxSem = DATA.semanas && DATA.semanas.length ? Math.max.apply(null, DATA.semanas.map(function(s){ return parseInt(s, 10); })) : 0;
+      var globalMaxSem = DATA.semanas && DATA.semanas.length ? Math.max.apply(null, DATA.semanas.map(function(s){ return parseInt(s, 10); })) : 0;
   return globalMaxSem > 9999 ? globalMaxSem % 100 : globalMaxSem;
 }
 
@@ -5902,7 +6046,7 @@ function renderResumen(){
     dayGroups.forEach(function(group){
       headSemanal += '<th style="font-size:15px;text-align:right;width:68px;min-width:68px;max-width:68px;padding:10px 8px;font-weight:bold">'+group.label+'</th>';
     });
-    headSemanal += '<th style="font-size:15px;text-align:right;width:82px;min-width:82px;vertical-align:bottom;padding:10px 8px;border-left:2px solid #4a6a9c">Total general</th></tr>';
+    headSemanal += '<th style="font-size:15px;text-align:right;width:82px;min-width:82px;vertical-align:bottom;padding:10px 8px;border-left:2px solid #4a6a9c;border-right:1px solid #3a5a8c">Total general</th></tr>';
     document.getElementById('tResumenHead').innerHTML = headSemanal;
 
     window.toggleResumenLevel = function(id){
@@ -6316,7 +6460,8 @@ function renderResumen(){
           programacionIaReasons.push({tienda:aiTienda, producto:aiProducto, suggestion:aiSuggestion});
         }
       });
-      var r1Span = r2Keys.length * baseR2RowCount + totalProgRows + totalAiRows;
+      var cfRowsPerR2 = state.showCuartoFrio ? Math.max(1, semsResumen.length) : 0;
+      var r1Span = r2Keys.length * baseR2RowCount + totalProgRows + totalAiRows + r2Keys.length * cfRowsPerR2;
       var id1 = 'grp-'+i1;
 
       r2Keys.forEach(function(r2Key, r2i){
@@ -6326,7 +6471,7 @@ function renderResumen(){
         var r2Bg = r2i % 2 === 0 ? '#ffffff' : '#f4f6fa';
         var savedProgRows = r2ProgRowsMap[r2Key] || [];
         var aiSuggestion = r2AiSuggestionMap[r2Key] || null;
-        var r2RowCount = baseR2RowCount + savedProgRows.length + (aiSuggestion ? 1 : 0);
+        var r2RowCount = baseR2RowCount + savedProgRows.length + (aiSuggestion ? 1 : 0) + cfRowsPerR2;
 
         /* ── Filas Programado (arriba de embarque) ── */
         var hasProgRows = savedProgRows.length > 0;
@@ -6366,26 +6511,182 @@ function renderResumen(){
           });
 
           var progRowTotal = progRow.values.reduce(function(s, x){ return s + (parseFloat(x)||0); }, 0);
-          pRow += '<td data-group="'+id1+'" style="font-size:14px;font-weight:bold;color:#bf360c;background:'+progBg+';text-align:right;width:82px;min-width:82px;padding:3px 8px;border-left:2px solid #e0a030">'+
+          pRow += '<td data-group="'+id1+'" style="font-size:14px;font-weight:bold;color:#bf360c;background:'+progBg+';text-align:right;width:82px;min-width:82px;padding:3px 8px;border-left:2px solid #e0a030;border-right:1px solid #e0e6f0">'+
             fmt(progRowTotal)+'</td>';
 
           pRow += '</tr>';
           bodySemanal.push(pRow);
         });
+          
+function _getDateKeyFromSemDay(sem, dayStr) {
+    if (!DATA || !DATA.semana_to_week_starts) return '';
+    var weekNum = parseInt(sem, 10);
+    // Las semanas seleccionadas normalmente vienen como YYYYWW (202628),
+    // mientras que el mapa compara contra el número corto (28).
+    if (weekNum > 99) weekNum = weekNum % 100;
+    var map = DATA.semana_to_week_starts;
+    var mondayStr = null;
+    for (var k in map) {
+        if (map[k] % 100 === weekNum) {
+            mondayStr = k;
+            break;
+        }
+    }
+    if (!mondayStr) return '';
+    
+    var parts = String(mondayStr).split(/[\/-]/);
+    var d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    
+    // semana_to_week_starts usa el domingo como inicio de semana.
+    var offset = 0;
+    var ds = String(dayStr || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (ds.indexOf('sunday') === 0) offset = 0;
+    else if (ds.indexOf('monday') === 0) offset = 1;
+    else if (ds.indexOf('tuesday') === 0) offset = 2;
+    else if (ds.indexOf('wednesday') === 0) offset = 3;
+    else if (ds.indexOf('thursday') === 0) offset = 4;
+    else if (ds.indexOf('friday') === 0) offset = 5;
+    else if (ds.indexOf('saturday') === 0) offset = 6;
+    if (ds === 'dom') offset = 0;
+    else if (ds === 'lun') offset = 1;
+    else if (ds === 'mar') offset = 2;
+    else if (ds === 'mié' || ds === 'mie') offset = 3;
+    else if (ds === 'jue') offset = 4;
+    else if (ds === 'vie') offset = 5;
+    else if (ds === 'sáb' || ds === 'sab') offset = 6;
+    
+    d.setDate(d.getDate() + offset);
+    
+    var yy = d.getFullYear();
+    var mm = d.getMonth() + 1;
+    var dd = d.getDate();
+    return yy + '-' + (mm < 10 ? '0'+mm : mm) + '-' + (dd < 10 ? '0'+dd : dd);
+}
+
+          /* ── Fila Cuarto Frío (una sola fila, suma todos los días) ── */
+          function _cuartoFrioLookup(source, keys) {
+              if (!source || typeof source !== 'object') return 0;
+              var pad = function(v) { return String(v).length === 1 ? '0' + v : String(v); };
+              var normalizeDate = function(v) {
+                  var s = String(v || '').trim().split('T')[0].split(' ')[0];
+                  var m = s.match(/^(\d{4})[-\/]?(\d{2})[-\/]?(\d{2})$/);
+                  if (m) return m[1] + '-' + m[2] + '-' + m[3];
+                  m = s.match(/^(\d{1,2})[-\/]?(\d{1,2})[-\/]?(\d{4})$/);
+                  if (m) return m[3] + '-' + pad(m[2]) + '-' + pad(m[1]);
+                  return s;
+              };
+              var wanted = (keys || []).map(normalizeDate).filter(Boolean);
+              var total = 0;
+              Object.keys(source).forEach(function(k) {
+                  if (wanted.indexOf(normalizeDate(k)) >= 0) total += Number(source[k]) || 0;
+              });
+              return total;
+          }
+
+          if (state.showCuartoFrio) {
+              var cfProdData = null;
+              if (DATA && DATA.detalle_cuartofrio && DATA.detalle_cuartofrio.data) {
+                  var cfStoreMap = DATA.detalle_cuartofrio.data;
+                  /* El pivot puede invertir tienda/producto (Producto o Tienda).
+                     Resolver por las claves reales del detalle evita que Cuarto
+                     Frío quede vacío al cambiar el modo de la tabla. */
+                  var cfNorm = function(v, stripBqt){
+                    return String(v || '').toUpperCase().normalize('NFD')
+                      .replace(/[\u0300-\u036f]/g,'').replace(/^SC\s+/,'').trim()
+                      .replace(stripBqt ? /^BQT\s+/ : /$^/,'').replace(/[^A-Z0-9]/g,'');
+                  };
+                  var cfFindStore = function(candidate){
+                    var exact = Object.prototype.hasOwnProperty.call(cfStoreMap, candidate) ? candidate : null;
+                    if (exact) return exact;
+                    var wanted = cfNorm(candidate, false);
+                    return Object.keys(cfStoreMap).find(function(k){
+                      var key = cfNorm(k, false);
+                      return key === wanted || key.indexOf(wanted) >= 0 || wanted.indexOf(key) >= 0;
+                    });
+                  };
+                  var cfResolvedStore = cfFindStore(r1Key) || cfFindStore(r2Key);
+                  if (cfResolvedStore && cfStoreMap[cfResolvedStore]) {
+                    var cfProductCandidate = (cfResolvedStore === cfFindStore(r1Key)) ? r2Key : r1Key;
+                    var cfProducts = cfStoreMap[cfResolvedStore] || {};
+                    var cfExactProduct = Object.prototype.hasOwnProperty.call(cfProducts, cfProductCandidate) ? cfProductCandidate : null;
+                    var cfWantedProduct = cfNorm(cfProductCandidate, true);
+                    var cfResolvedProduct = cfExactProduct || Object.keys(cfProducts).find(function(k){
+                      var key = cfNorm(k, true);
+                      return key === cfWantedProduct || key.indexOf(cfWantedProduct) >= 0 || cfWantedProduct.indexOf(key) >= 0;
+                    });
+                    if (cfResolvedProduct) cfProdData = cfProducts[cfResolvedProduct];
+                  }
+                  /* Fallback: the detail may arrive with slightly different
+                     labels (or as a flat row map). Search the complete tree
+                     before rendering an empty Cuarto Frío row. */
+                  if (!cfProdData) {
+                    var wantedKeys = [r1Key, r2Key].map(function(v){ return cfNorm(v, true); }).filter(Boolean);
+                    Object.keys(cfStoreMap).some(function(storeKey) {
+                      var products = cfStoreMap[storeKey];
+                      if (!products || typeof products !== 'object' || Array.isArray(products)) return false;
+                      return Object.keys(products).some(function(productKey) {
+                        var pk = cfNorm(productKey, true);
+                        if (wantedKeys.indexOf(cfNorm(storeKey, true)) >= 0 && wantedKeys.indexOf(pk) >= 0) {
+                          cfProdData = products[productKey];
+                          return true;
+                        }
+                        return false;
+                      });
+                    });
+                  }
+              }
+              semsResumen.forEach(function(cfSem, cfSemIdx){
+              var cfRowStr = '<tr data-group="'+id1+'" style="background:#e0f7fa;">';
+              if (isFirstR2 && !hasProgRows && cfSemIdx === 0) {
+                  cfRowStr +=
+                    '<td class="'+(pivotMode === 'producto' ? 'resumen-product-name' : 'resumen-store-name')+'" rowspan="'+r1Span+'" data-r1-rowspan="'+i1+'" style="font-size:15px;font-weight:bold;vertical-align:top;'+
+                    'white-space:nowrap;padding:5px 8px;border-right:1px solid #c8d2e8;'+
+                    'border-top:2px solid #b0bcd8;background:#eef2fa">'+
+                    '<span data-togbtn="'+id1+'" style="'+TOG_STYLE_SEM+'" onclick="toggleResumenLevel(\''+id1+'\')">−</span>'+r1Key+'</td>';
+              }
+              if (!hasProgRows && cfSemIdx === 0) {
+                  cfRowStr +=
+                    '<td class="'+(pivotMode === 'tienda' ? 'resumen-product-name' : 'resumen-store-name')+'" rowspan="'+r2RowCount+'" data-r2-rowspan="'+i1+'_'+r2i+'" data-group="'+id1+'" style="vertical-align:top;white-space:nowrap;padding:4px 6px;'+
+                    'border-top:'+borderTop+';border-right:1px solid #d0d8ea;font-size:14px;color:#2980B9;font-weight:600;background:'+r2Bg+'">'+
+                    r2Key+'</td>';
+              }
+              var cfWeekLabel = String(cfSem);
+              if (cfWeekLabel.length > 2) cfWeekLabel = cfWeekLabel.slice(-2);
+              cfRowStr += '<td data-group="'+id1+'" style="background:#e0f2fe;color:#0369a1;font-weight:600;text-align:left;"><i class="fa-solid fa-snowflake" style="color:#0ea5e9; margin-right:4px;"></i> Cuarto Frío'+
+                (cfWeekLabel ? ' <span style="font-size:11px;background:#bae6fd;color:#0369a1;padding:1px 4px;border-radius:4px;margin-left:4px;">'+cfWeekLabel+'</span>' : '')+
+                '</td>';
+              var cfGrandTotal = 0;
+              var cfCells = '';
+              dayGroups.forEach(function(group, gi){
+                  var dayTotal = 0;
+                  var dateKey1 = _getDateKeyFromSemDay(cfSem, group.label.toLowerCase());
+                  var parts = dateKey1.split('-');
+                  var dateKey2 = parts.length === 3 ? (parts[2] + '/' + parts[1] + '/' + parts[0]) : '';
+                  var dateKey3 = parts.length === 3 ? (parseInt(parts[2],10) + '/' + parseInt(parts[1],10) + '/' + parts[0]) : '';
+                  if (cfProdData) dayTotal = _cuartoFrioLookup(cfProdData, [dateKey1, dateKey2, dateKey3]);
+                  cfGrandTotal += dayTotal;
+                  cfCells += '<td data-group="'+id1+'" style="background:#e0f2fe;color:#0369a1;font-weight:600;text-align:center;">' + (dayTotal || '') + '</td>';
+              });
+              cfRowStr += cfCells;
+              cfRowStr += '<td data-group="'+id1+'" style="background:#e0f2fe;color:#0369a1;font-weight:bold;text-align:right;">' + (cfGrandTotal || '') + '</td>';
+              cfRowStr += '</tr>';
+              bodySemanal.push(cfRowStr);
+              });
+          }
 
         /* Sugerencia informativa: se muestra aparte y nunca se persiste. */
         if(aiSuggestion){
           var aiBg = '#e8f4ff';
           var aiBorder = hasProgRows ? '1px solid #9ec9ed' : borderTop;
           var aiRow = '<tr class="programacion-ia-row" style="background:'+aiBg+';border-top:'+aiBorder+'">';
-          if(isFirstR2 && !hasProgRows){
+          if(isFirstR2 && !hasProgRows && !state.showCuartoFrio){
             aiRow +=
               '<td class="'+(pivotMode === 'producto' ? 'resumen-product-name' : 'resumen-store-name')+'" rowspan="'+r1Span+'" data-r1-rowspan="'+i1+'" style="font-size:15px;font-weight:bold;vertical-align:top;'+
               'white-space:nowrap;padding:5px 8px;border-right:1px solid #c8d2e8;'+
               'border-top:2px solid #b0bcd8;background:#eef2fa">'+
               '<span data-togbtn="'+id1+'" style="'+TOG_STYLE_SEM+'" onclick="toggleResumenLevel(\''+id1+'\')">−</span>'+r1Key+'</td>';
           }
-          if(!hasProgRows){
+          if(!hasProgRows && !state.showCuartoFrio){
             aiRow +=
               '<td class="'+(pivotMode === 'tienda' ? 'resumen-product-name' : 'resumen-store-name')+'" rowspan="'+r2RowCount+'" data-r2-rowspan="'+i1+'_'+r2i+'" data-group="'+id1+'" style="vertical-align:top;white-space:nowrap;padding:4px 6px;'+
               'border-top:'+borderTop+';border-right:1px solid #d0d8ea;font-size:14px;color:#2980B9;font-weight:600;background:'+r2Bg+'">'+r2Key+'</td>';
@@ -6396,7 +6697,7 @@ function renderResumen(){
             var aiValue = Number(aiSuggestion.values[gi] || 0);
             aiRow += '<td data-group="'+id1+'" style="font-size:14px;color:#075985;background:'+aiBg+';text-align:right;width:68px;min-width:68px;max-width:68px;padding:4px 8px;vertical-align:middle">'+(aiValue ? fmt(aiValue) : '')+'</td>';
           });
-          aiRow += '<td data-group="'+id1+'" style="font-size:14px;font-weight:bold;color:#075985;background:'+aiBg+';text-align:right;width:82px;min-width:82px;padding:4px 8px;border-left:2px solid #60a5fa">'+fmt(aiSuggestion.total)+'</td></tr>';
+          aiRow += '<td data-group="'+id1+'" style="font-size:14px;font-weight:bold;color:#075985;background:'+aiBg+';text-align:right;width:82px;min-width:82px;padding:4px 8px;border-left:2px solid #60a5fa;border-right:1px solid #7dd3fc">'+fmt(aiSuggestion.total)+'</td></tr>';
           bodySemanal.push(aiRow);
         }
 
@@ -6408,7 +6709,7 @@ function renderResumen(){
           var isVeryFirst = (isFirstR2 && di === 0 && wi === 0);
           var rowHTML = '<tr style="background:'+rowBg+';border-top:'+(isFirstDef && isFirstWeek ? borderTop : '1px solid #edf0f6')+'">';
 
-          if(!hasProgRows && !aiSuggestion && isVeryFirst){
+          if(!hasProgRows && !aiSuggestion && !state.showCuartoFrio && isVeryFirst){
             rowHTML +=
               '<td class="'+(pivotMode === 'producto' ? 'resumen-product-name' : 'resumen-store-name')+'" rowspan="'+r1Span+'" data-r1-rowspan="'+i1+'" style="font-size:15px;font-weight:bold;vertical-align:top;'+
               'white-space:nowrap;padding:5px 8px;border-right:1px solid #c8d2e8;'+
@@ -6416,7 +6717,7 @@ function renderResumen(){
               '<span data-togbtn="'+id1+'" style="'+TOG_STYLE_SEM+'" onclick="toggleResumenLevel(\''+id1+'\')">−</span>'+r1Key+'</td>';
           }
 
-          if(!hasProgRows && !aiSuggestion && isFirstDef && isFirstWeek){
+          if(!hasProgRows && !aiSuggestion && !state.showCuartoFrio && isFirstDef && isFirstWeek){
             rowHTML +=
               '<td class="'+(pivotMode === 'tienda' ? 'resumen-product-name' : 'resumen-store-name')+'" rowspan="'+r2RowCount+'" data-r2-rowspan="'+i1+'_'+r2i+'" data-group="'+id1+'" style="vertical-align:top;white-space:nowrap;padding:4px 6px;'+
               'border-top:'+borderTop+';border-right:1px solid #d0d8ea;font-size:14px;color:#2980B9;font-weight:600;background:'+r2Bg+';">'+
@@ -6458,7 +6759,7 @@ function renderResumen(){
           var cAttrTot = getCommentAttr(cIdTot);
           rowHTML +=
             '<td data-group="'+id1+'" class="'+cAttrTot.cls+'"'+cAttrTot.str+' style="font-size:14px;'+colorStyle+'position:static;background:'+cellBg+';text-align:right;width:82px;min-width:82px;padding:3px 8px;vertical-align:middle;'+
-            'font-weight:bold;border-left:1px solid #c0cce0">'+(tot||'0')+'</td>';
+            'font-weight:bold;border-left:1px solid #c0cce0;border-right:1px solid #edf0f6">'+(tot||'0')+'</td>';
 
           rowHTML += '</tr>';
           bodySemanal.push(rowHTML);
@@ -6567,7 +6868,7 @@ function renderResumen(){
         else if (valPct < 90) cellBg = '#fff9c4';
         else cellBg = '#c8e6c9';
       }
-      totalRow += '<td style="font-size:14px;position:static;background:'+cellBg+';color:'+cellColor+';text-align:right;width:82px;min-width:82px;padding:3px 8px;vertical-align:middle;font-weight:bold;border-left:2px solid #4a6a9c">'+gt+'</td>';
+      totalRow += '<td style="font-size:14px;position:static;background:'+cellBg+';color:'+cellColor+';text-align:right;width:82px;min-width:82px;padding:3px 8px;vertical-align:middle;font-weight:bold;border-left:2px solid #4a6a9c;border-right:1px solid #3a5a8c">'+gt+'</td>';
       totalRow += '</tr>';
       totalRowsGroup.push(totalRow);
       });
@@ -8614,3 +8915,123 @@ document.addEventListener('click', function(e) {
     if (btnDev && !btnDev.contains(e.target) && !menuDev.contains(e.target)) menuDev.style.display = 'none';
   }
 });
+
+
+
+// --- GEMINI BULK ANALYSIS START ---
+window.geminiBulkSuggestions = window.geminiBulkSuggestions || {};
+window.isGeminiAnalyzing = false;
+
+window.runGeminiBulkAnalysis = async function() {
+    // Esta función fue reemplazada por importación manual de Excel
+    alert("Usa el botón 📥 Importar Sugerencias para cargar las sugerencias desde Excel.");
+}
+
+
+window.importGeminiExcel = function(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+
+    function processFile() {
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            var data = e.target.result;
+            try {
+                var workbook = XLSX.read(data, {type: 'binary'});
+                
+                // Buscar hoja "Tienda y producto", si no la primera disponible
+                var sheetName = workbook.SheetNames.find(function(n) {
+                    return n.toLowerCase().includes('tienda');
+                }) || workbook.SheetNames[0];
+                
+                var worksheet = workbook.Sheets[sheetName];
+                var json = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
+                
+                if (json.length === 0) {
+                    alert("El archivo Excel está vacío o no se encontró la hoja.");
+                    return;
+                }
+                
+                var totalImported = 0;
+                if (!window.geminiBulkSuggestions) window.geminiBulkSuggestions = {};
+
+                // Detectar columna de sugerencia dinámicamente (ej. "Propuesta S31")
+                var firstRow = json[0] || {};
+                var colSug = Object.keys(firstRow).find(function(k) {
+                    return /propuesta/i.test(k) || /sugerido/i.test(k) || /sugerencia/i.test(k);
+                }) || "Propuesta S31";
+                
+                // Detectar columna de razón/comentario
+                var colRazon = Object.keys(firstRow).find(function(k) {
+                    return /raz[oó]n/i.test(k) || /comentario/i.test(k) || /decisi[oó]n/i.test(k);
+                }) || "Razón detallada";
+
+                json.forEach(function(row) {
+                    var rowTienda = row["Tienda"] || row["tienda"] || row["TIENDA"] || "";
+                    var rowProd   = row["Producto"] || row["producto"] || row["PRODUCTO"] || "";
+                    var rowSug    = row[colSug] !== undefined ? row[colSug] : "";
+                    var rowRazon  = row[colRazon] || "";
+
+                    // Días de la semana
+                    var rowDias = {
+                        lun: Number(row["Lun"] || row["LUN"] || 0),
+                        mar: Number(row["Mar"] || row["MAR"] || 0),
+                        mie: Number(row["Mié"] || row["Mie"] || row["MIÉ"] || 0),
+                        jue: Number(row["Jue"] || row["JUE"] || 0),
+                        vie: Number(row["Vie"] || row["VIE"] || 0),
+                        sab: Number(row["Sáb"] || row["Sab"] || row["SÁB"] || 0),
+                        dom: Number(row["Dom"] || row["DOM"] || 0)
+                    };
+
+                    var rowTendencia = row["Tendencia"] || "";
+                    var rowBalance   = row["Balance 4 semanas"] !== undefined ? row["Balance 4 semanas"] : "";
+
+                    if (rowTienda && rowProd) {
+                        if (!window.geminiBulkSuggestions[rowTienda]) {
+                            window.geminiBulkSuggestions[rowTienda] = {};
+                        }
+                        window.geminiBulkSuggestions[rowTienda][rowProd] = {
+                            tienda: rowTienda,
+                            producto: rowProd,
+                            total_sugerido: rowSug,
+                            decision: rowRazon,
+                            dias: rowDias,
+                            tendencia: rowTendencia,
+                            balance: rowBalance
+                        };
+                        totalImported++;
+                    }
+                });
+                
+                if (totalImported > 0) {
+                    var maxSem = DATA.semanas && DATA.semanas.length
+                        ? Math.max.apply(null, DATA.semanas.map(function(s){ return parseInt(s, 10); }))
+                        : 0;
+                    localStorage.setItem('GROQ_SUGGESTIONS_CACHE_V3_' + maxSem, JSON.stringify(window.geminiBulkSuggestions));
+                    alert("✅ Se importaron " + totalImported + " sugerencias desde la hoja \"" + sheetName + "\"\nSemana: S" + maxSem + "\n\nLa tabla se actualizará ahora.");
+                    renderResumen();
+                } else {
+                    alert("⚠️ No se encontraron filas válidas.\nAsegúrate de que el archivo tenga columnas 'Tienda' y 'Producto'.");
+                }
+            } catch (err) {
+                console.error("Error importando Excel de IA:", err);
+                alert("❌ Error al procesar el archivo Excel.\n" + err.message);
+            }
+            
+            // Reset file input para poder subir el mismo archivo de nuevo
+            event.target.value = '';
+        };
+        reader.readAsBinaryString(file);
+    }
+
+    // Carga dinámica de SheetJS si no está disponible
+    if (typeof XLSX !== 'undefined') {
+        processFile();
+    } else {
+        var script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+        script.onload = function() { processFile(); };
+        script.onerror = function() { alert("❌ No se pudo cargar la librería para leer Excel. Verifica tu conexión a internet."); };
+        document.head.appendChild(script);
+    }
+};

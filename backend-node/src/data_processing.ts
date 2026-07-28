@@ -505,6 +505,7 @@ export async function cargarDatos(cacheKey = "") {
   }
 
   const detalleInventario = { fechas: [] as string[], fechas_por_semana: {} as any, fecha_to_semana: {} as any, data: {} as any };
+  const detalleCuartoFrio = { fechas: [] as string[], data: {} as any };
   if (wsDetalle) {
     const detRows = XLSX.utils.sheet_to_json<any[]>(wsDetalle, { header: 1 });
     const detHeaders = (detRows[0] || []).map(h => String(h || '').trim().toLowerCase());
@@ -561,6 +562,45 @@ export async function cargarDatos(cacheKey = "") {
       detalleInventario.fecha_to_semana = fechaToSemana;
       detalleInventario.data = detData;
     }
+
+    // --- Extracción para Cuarto Frío ---
+    const idxTiendaCF = 10; // K
+    const idxFechaCF = 11;  // L
+    const idxProductoCF = 13; // N
+    const idxExistenciaCF = 14; // O
+
+    if (idxTiendaCF >= 0 && idxFechaCF >= 0 && idxProductoCF >= 0 && idxExistenciaCF >= 0) {
+      const cfData: any = {};
+      const cfFechasSet = new Set<string>();
+
+      for (let i = 1; i < detRows.length; i++) {
+        const row = detRows[i];
+        if (!row) continue;
+        const td = String(row[idxTiendaCF] || '').trim();
+        const pd2 = String(row[idxProductoCF] || '').trim();
+        const existV = sv(row[idxExistenciaCF]);
+        const fechaRaw = row[idxFechaCF];
+        
+        let fechaStr = '';
+        let dateObj = parseExcelDate(fechaRaw);
+        if (dateObj) {
+            fechaStr = formatDateStr(dateObj); 
+        } else if (fechaRaw) {
+            fechaStr = String(fechaRaw).trim();
+            dateObj = parseExcelDate(fechaStr);
+        }
+
+        if (td && pd2 && fechaStr) {
+          cfFechasSet.add(fechaStr);
+          if (!cfData[td]) cfData[td] = {};
+          if (!cfData[td][pd2]) cfData[td][pd2] = {};
+          cfData[td][pd2][fechaStr] = (cfData[td][pd2][fechaStr] || 0) + existV;
+        }
+      }
+      detalleCuartoFrio.fechas = Array.from(cfFechasSet).sort();
+      detalleCuartoFrio.data = cfData;
+    }
+    // --- Fin Extracción Cuarto Frío ---
   }
 
   const gastosOtros: any = {};
@@ -727,6 +767,7 @@ export async function cargarDatos(cacheKey = "") {
     inventario_por_tienda: inventarioPorTienda,
     inventario_por_producto: inventarioPorProducto,
     detalle_inventario: detalleInventario,
+    detalle_cuartofrio: detalleCuartoFrio,
     producto_gasto: PRODUCTO_GASTO,
     tienda_ruta: TIENDA_RUTA,
     gasto_data: gastoData,
