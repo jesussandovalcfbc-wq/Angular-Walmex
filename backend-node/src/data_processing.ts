@@ -681,16 +681,17 @@ export async function cargarDatos(cacheKey = "") {
     const appRows = XLSX.utils.sheet_to_json<any[]>(wsReporteGastosApp, { header: 1 });
     const normalizar = (value: any) => String(value || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
     const parseFechaGastoApp = (value: any) => {
-      // Las fechas numéricas ahora vienen en formato normal en Excel
       if (typeof value === 'number') {
         const excelDate = new Date(Math.round((value - 25569) * 86400 * 1000));
         if (isNaN(excelDate.getTime())) return null;
         const day = excelDate.getUTCDate();
         const month = excelDate.getUTCMonth() + 1;
         const year = excelDate.getUTCFullYear();
-        const corrected = new Date(year, month - 1, day);
-        if (corrected.getFullYear() === year && corrected.getMonth() === month - 1 && corrected.getDate() === day) return corrected;
-        return null;
+        // IMPORTANTE: SharePoint / PowerAutomate invierte el mes y el día (formato US MM/DD/YYYY)
+        // para todos los días <= 12 (ej. 10/7/2026 lo toma como Oct 7).
+        // Intercambiamos el mes y el día para restaurar la fecha correcta (DD/MM/YYYY).
+        const corrected = new Date(year, day - 1, month);
+        return corrected;
       }
       if (typeof value === 'string') {
         const match = value.trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
