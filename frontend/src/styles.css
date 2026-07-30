@@ -1,7 +1,9 @@
 @import "@fontsource/lato/400.css";
 @import "@fontsource/lato/700.css";
 @import "@fontsource/lato/900.css";
+@import "primeicons/primeicons.css";
 @import "tailwindcss";
+@source "./assets";
 
 @theme {
   --font-sans: "Lato", "Source Sans Pro", "Segoe UI", Arial, sans-serif;
@@ -114,9 +116,9 @@
   tbody tr.flagged { @apply bg-red-50!; }
 
   /* Existing controls rendered in the tables */
-  .mode-btn-group { @apply flex flex-wrap items-center gap-1.5!; }
-  .mode-btn { @apply h-7 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-50; }
-  .mode-btn.active { @apply border-slate-900 bg-slate-900 text-white; }
+  .mode-btn-group { @apply flex flex-wrap items-center gap-2!; }
+  .mode-btn { @apply inline-flex items-center justify-center h-7 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-semibold text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-800 shadow-sm cursor-pointer; }
+  .mode-btn.active { @apply border-blue-600 bg-blue-600 text-white shadow-md hover:bg-blue-700 hover:text-white; }
   .flag-btn { @apply rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] text-slate-400 hover:border-red-400 hover:text-red-600; }
   .nota-input { @apply w-full min-w-20 border-0 border-b border-transparent bg-transparent px-1 py-1 text-[11px] text-slate-600 outline-none focus:border-blue-400 focus:bg-blue-50; }
   input[type="date"], input[type="text"], input[type="number"], textarea, select { @apply rounded-md border border-slate-300 bg-white text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100; }
@@ -323,8 +325,8 @@
   }
   table tbody tr:last-child td { border-top:1px solid #a9bed5; }
   .ruta-row td { background:#dbeafe !important; color:#123b66 !important; }
-  .mode-btn { height:26px; border-color:#cbd5e1; background:#fff; color:#334155; }
-  .mode-btn.active { border-color:#155eef; background:#155eef; color:#fff; box-shadow:0 2px 6px rgb(21 94 239 / .2); }
+  
+  
 
   /* Compact Resumen workspace */
   #viewResumen { background:#fff; padding:6px 12px 12px; }
@@ -358,30 +360,12 @@
     letter-spacing:.01em;
     text-transform:none;
   }
-  #resumenTitle .mode-btn-group { gap:5px !important; }
-  #resumenTitle button {
-    display:inline-flex !important;
-    height:26px !important;
-    align-items:center !important;
-    justify-content:center !important;
-    gap:3px !important;
-    border:1px solid rgb(255 255 255 / .18) !important;
-    border-radius:6px !important;
-    padding:0 9px !important;
-    font-size:10px !important;
-    font-weight:700 !important;
-    letter-spacing:.015em !important;
-    box-shadow:0 1px 2px rgb(15 23 42 / .08) !important;
-    transition:background-color .15s,border-color .15s,color .15s,box-shadow .15s,transform .15s !important;
-    opacity:1;
-  }
-  #resumenTitle button:not(:disabled):hover {
-    transform:translateY(-1px);
-    box-shadow:0 3px 8px rgb(15 23 42 / .14) !important;
-  }
-  #resumenTitle button:not(:disabled):active { transform:translateY(0); }
-  #resumenTitle button:focus-visible { outline:2px solid #60a5fa !important; outline-offset:2px; }
-  #resumenTitle button .material-icons { font-size:13px !important; }
+  
+  
+  
+  
+  
+  
   #btnAddCaptureSem { border-color:#1d4ed8 !important; background:linear-gradient(135deg,#2563eb,#1d4ed8) !important; color:#fff !important; }
   #btnRemoveCaptureSem { background:#fff5f5 !important; border-color:#fecaca !important; color:#b91c1c !important; }
   #btnRemoveCaptureSem:disabled { opacity:.45 !important; cursor:not-allowed !important; }
@@ -390,48 +374,13 @@
 
   /* Filtros EMB/POS/THRU estilo WebDataRocks (igual a Producto/Tienda) */
   #metricFilters { display:inline-flex; align-items:center; gap:2px; }
-  #metricFilters .mode-btn {
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    height: 23px !important;
-    padding: 2px 8px !important;
-    border: 1px solid #8ba0bc !important;
-    border-radius: 0 !important;
-    background: linear-gradient(to bottom,#fbfdff 0%,#e9f2fc 52%,#d8e7f7 100%) !important;
-    color: #173b67 !important;
-    font: 400 11px Verdana, Geneva, sans-serif !important;
-    letter-spacing: 0 !important;
-    cursor: pointer !important;
-    user-select: none !important;
-    box-shadow: none !important;
-  }
-  #metricFilters .mode-btn.active {
-    border-color: #5f82a9 !important;
-    background: linear-gradient(to bottom,#f5faff 0%,#dcebf9 52%,#c9ddf2 100%) !important;
-  }
+  
+  
 
-  #btnExportCapture { border-color:#047857 !important; background:linear-gradient(135deg,#059669,#047857) !important; color:#fff !important; }
-  #btnPivotProducto, #btnPivotTienda { min-width:62px; background:#fff !important; color:#334155 !important; }
-  #btnPivotProducto.active, #btnPivotTienda.active { border-color:#60a5fa !important; background:#2563eb !important; color:#fff !important; }
-  #resumenTitle #btnPivotProducto,
-  #resumenTitle #btnPivotTienda,
-  #resumenTitle #btnResumenAnalisis {
-    position:relative;
-    min-width:92px !important;
-    height:23px !important;
-    justify-content:center !important;
-    border:1px solid #8ba0bc !important;
-    border-radius:0 !important;
-    background:linear-gradient(to bottom,#fbfdff 0%,#e9f2fc 52%,#d8e7f7 100%) !important;
-    padding:2px 8px !important;
-    box-shadow:none !important;
-    color:#173b67 !important;
-    font:400 11px Verdana, Geneva, sans-serif !important;
-    letter-spacing:0 !important;
-    text-align:center !important;
-    transform:none !important;
-  }
+  
+  
+  
+  
 
   #resumenTitle #btnPivotProducto:hover,
   #resumenTitle #btnPivotTienda:hover,
@@ -445,32 +394,61 @@
     box-shadow:none !important;
     transform:none !important;
   }
-  #resumenTitle #btnExportCapture {
-    width:38px !important;
-    min-width:38px !important;
-    height:25px !important;
-    padding:0 !important;
-    border:1px solid #8f969e !important;
-    border-radius:0 !important;
-    background:linear-gradient(to bottom,#ffffff 0%,#f4f4f4 48%,#dedede 100%) !important;
-    box-shadow:inset 1px 1px 0 #fff !important;
-    color:#0b7656 !important;
-    transform:none !important;
-  }
-  #resumenTitle #btnExportCapture:hover {
-    border-color:#66798d !important;
-    background:linear-gradient(to bottom,#ffffff 0%,#eef5f2 48%,#d3e5df 100%) !important;
-    box-shadow:inset 1px 1px 0 #fff !important;
-    transform:none !important;
-  }
-  #resumenTitle #btnExportCapture:active {
-    background:linear-gradient(to bottom,#d8d8d8,#f5f5f5) !important;
-    box-shadow:inset 1px 1px 2px rgba(0,0,0,.22) !important;
-  }
+  #resumenTitle 
+  
+  
   .resumen-xls-icon {
     display:block;
     width:19px;
     height:19px;
+  }
+
+  /* Men├║ de exportaci├│n compacto y limpio, estilo Bootstrap */
+  #excelDropdownContainer { position:relative; }
+  #excelDropdownMenu.excel-export-menu {
+    display:none;
+    position:absolute;
+    top:calc(100% + 4px);
+    right:0;
+    z-index:1000;
+    min-width:204px;
+    padding:4px;
+    background:#fff;
+    border:1px solid #adb5bd;
+    border-radius:4px;
+    box-shadow:0 .25rem .5rem rgba(0,0,0,.15);
+    text-align:left;
+  }
+  #excelDropdownMenu .excel-export-option {
+    display:flex;
+    align-items:center;
+    gap:9px;
+    width:100%;
+    box-sizing:border-box;
+    padding:7px 10px;
+    border-radius:4px;
+    color:#212529;
+    background:transparent;
+    text-decoration:none;
+    /* Tipograf├¡a de interfaz n├¡tida, similar a Bootstrap y al sistema de referencia */
+    font:500 12px/1.25 "Segoe UI", Arial, sans-serif;
+    letter-spacing:0;
+    text-transform:none !important;
+    white-space:nowrap;
+    transition:background-color .12s ease, color .12s ease;
+  }
+  #excelDropdownMenu .excel-export-option + .excel-export-option { margin-top:1px; }
+  #excelDropdownMenu .excel-export-option:hover,
+  #excelDropdownMenu .excel-export-option:focus-visible {
+    color:#0f5132;
+    background:#eaf7ef;
+    outline:none;
+  }
+  #excelDropdownMenu .excel-export-option i {
+    width:15px;
+    color:#212529;
+    font-size:12px;
+    text-align:center;
   }
 
 
@@ -1687,3 +1665,96 @@ tr.dev-row-red td, tr.dev-row-green td { color: #000 !important; font-weight: no
 .table-bs .text-danger { color: #dc3545; }
 .table-bs .text-warning { color: #fd7e14; }
 .table-bs .fst-italic { font-style: italic; }
+
+/* Men├║ en cascada de Exportar F.Pos */
+.fpos-export-wrapper {
+  position: relative;
+}
+
+.fpos-export-trigger {
+  width: 100%;
+  border: 0;
+  background: #fff;
+  color: #111827;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font: 12px/1.2 Verdana, Arial, sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fpos-export-trigger:hover,
+.fpos-submenu button:hover {
+  background: #f2f5f8;
+}
+
+.fpos-export-trigger .fpos-chevron {
+  margin-left: auto;
+  font-size: 9px;
+}
+
+.fpos-submenu,
+.fpos-picker-menu {
+  position: absolute;
+  top: 0;
+  background: #fff;
+  border: 1px solid #9aa7b4;
+  border-radius: 2px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.16);
+  z-index: 10050;
+}
+
+.fpos-submenu {
+  left: calc(100% + 4px);
+  min-width: 125px;
+  padding: 3px 0;
+}
+
+.fpos-submenu button {
+  width: 100%;
+  border: 0;
+  background: #fff;
+  color: #111827;
+  display: block;
+  padding: 8px 12px;
+  font: 12px/1.2 Verdana, Arial, sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fpos-picker-menu {
+  left: calc(100% + 134px);
+  width: 195px;
+  padding: 10px;
+  color: #111827;
+  font: 11px/1.3 Verdana, Arial, sans-serif;
+}
+
+#fposPickerTitle {
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.fpos-picker-menu select {
+  width: 100%;
+  height: 28px;
+  margin-bottom: 7px;
+  border: 1px solid #a9b7c5;
+  background: #fff;
+  color: #111827;
+  font: 11px Verdana, Arial, sans-serif;
+}
+
+.fpos-picker-menu > button {
+  width: 100%;
+  border: 1px solid #167640;
+  border-radius: 2px;
+  background: #198754;
+  color: #fff;
+  padding: 7px 10px;
+  font: 600 11px Verdana, Arial, sans-serif;
+  cursor: pointer;
+}
+ 

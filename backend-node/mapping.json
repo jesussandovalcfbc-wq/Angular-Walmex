@@ -1,0 +1,98 @@
+{
+  "stores": {
+    "PLAZA SAN PEDRO": [
+      "1140",
+      "WALMART 1140 Plaza San Pedro"
+    ],
+    "PLAYAS DE TIJUANA": [
+      "1613",
+      "WALMART 1613 Playas De Tijuana"
+    ],
+    "PACIFICO": [
+      "1616",
+      "WALMART 1616 Pacifico"
+    ],
+    "NOVENA": [
+      "1617",
+      "WALMART 1617 Novena"
+    ],
+    "LOMAS DE SANTA FE": [
+      "190",
+      "WALMART 190 Lomas de Santa Fe"
+    ],
+    "MACRO PLAZA INSURGENTES": [
+      "2023",
+      "WALMART 2023 Macro Plaza Insurgentes"
+    ],
+    "MEXICALI": [
+      "2304",
+      "WALMART 2304 Mexicali"
+    ],
+    "ENSENADA CENTRO": [
+      "2947",
+      "WALMART 2947 Ensenada Centro"
+    ],
+    "ENSENADA": [
+      "3015",
+      "WALMART 3015 Ensenada"
+    ],
+    "DIAZ ORDAZ": [
+      "3664",
+      "WALMART 3664 Diaz Ordaz"
+    ],
+    "TIJUANA HIPODROMO": [
+      "4011",
+      "WALMART 4011 Tijuana Hipodromo"
+    ],
+    "GALERÍAS DEL VALLE": [
+      "4026",
+      "WALMART 4026 Galerías Del Valle"
+    ],
+    "TIJUANA 2000": [
+      "4155",
+      "WALMART 4155 Tijuana 2000"
+    ],
+    "ROSARITO": [
+      "4187",
+      "WALMART 4187 Rosarito"
+    ],
+    "NUEVO MEXICALI": [
+      "5041",
+      "WALMART 5041 Nuevo Mexicali"
+    ],
+    "TECATE GARITA": [
+      "5295",
+      "WALMART 5295 Tecate Garita"
+    ]
+  },
+  "products": {
+    "DOCENA ROSAS 2 FILLERS": [
+      "DOCENA ROSAS 2 FILLERS",
+      null
+    ],
+    "MEDIA DOCENA ROSAS 2 FILLERS": [
+      "MEDIA DOCENA ROSAS 2 FILLERS",
+      null
+    ],
+    "WALMEX BQT MIXTO 12 ST PK 8": [
+      "WALMEX Bqt Mixto 12 st pk 8",
+      null
+    ],
+    "WALMEX BQT MIXTO 15 ST PK 6": [
+      "WALMEX Bqt Mixto 15 st pk 6",
+      null
+    ],
+    "WALMEX BQT MIXTO 9 ST PK 10": [
+      "WALMEX Bqt Mixto 9 st pk 10",
+      null
+    ],
+    "WALMEX BQT SNAPDRAGON PK8": [
+      "WALMEX Bqt snapdragon pk8",
+      null
+    ],
+    "WALMEX MIX ROSAS PK10": [
+      "Walmex Mix Rosas PK10",
+      null
+    ]
+  }
+}

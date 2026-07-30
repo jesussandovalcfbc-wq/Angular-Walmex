@@ -445,7 +445,8 @@ function _databaseConfigured() {
 var walmexComments = JSON.parse(localStorage.getItem('WALMEX_COMMENTS') || '{}');
 var currentCommentCellId = null;
 
-function openCommentModal(cellId) {
+function openCommentModal(cellId) { return; // Disabled for now 
+
   currentCommentCellId = cellId;
   var comm = walmexComments[cellId];
   document.getElementById('txtComment').value = comm ? (typeof comm === 'string' ? comm : comm.text) : '';
@@ -486,7 +487,7 @@ function deleteComment() {
 
 function getCommentAttr(cId) {
   var comm = walmexComments[cId];
-  var onClickStr = ' onclick="openCommentModal(\'' + cId + '\')"';
+  var onClickStr = ''; // ' onclick="openCommentModal(\'' + cId + '\')"';
   if(!comm) return { cls: '', str: onClickStr };
   var cText = typeof comm === 'string' ? comm : comm.text;
   var cDate = typeof comm === 'string' ? '' : ' (' + comm.date + ' ' + comm.time + ')';
@@ -1404,19 +1405,30 @@ function setView(v){
     var isActive = viewName === v;
     navButton.classList.toggle('is-active', isActive);
     navButton.setAttribute('aria-current', isActive ? 'page' : 'false');
+    
+    // Dejamos que styles.css maneje el hover y la clase .is-active con el "azul y amarillo"
+    // Ya no modificamos className vacio para no borrar is-active
+    navButton.style.background = '';
+    navButton.style.color = '';
+    // Solo quitamos las clases de Tailwind que puedan sobrar, dejando 'is-active' si existe
+    if (isActive) {
+        navButton.className = 'is-active';
+    } else {
+        navButton.className = '';
+    }
   });
-  document.getElementById('btnProd').style.background = v==='producto' ? '#6A4B59' : '#A08A95';
-  document.getElementById('btnProd').style.color = v==='producto' ? 'white' : 'white';
-  document.getElementById('btnTiend').style.background = v==='tienda' ? '#6A4B59' : '#A08A95';
-  document.getElementById('btnTiend').style.color = v==='tienda' ? 'white' : 'white';
-  document.getElementById('btnComp').style.background = v==='comparativo' ? '#6A4B59' : '#A08A95';
-  document.getElementById('btnComp').style.color = v==='comparativo' ? 'white' : 'white';
-  document.getElementById('btnInv').style.background = v==='inventario' ? '#6A4B59' : '#A08A95';
-  document.getElementById('btnInv').style.color = v==='inventario' ? 'white' : 'white';
-  document.getElementById('btnGasto').style.background = v==='gasto' ? '#6A4B59' : '#A08A95';
-  document.getElementById('btnGasto').style.color = v==='gasto' ? 'white' : 'white';
-  document.getElementById('btnResumen').style.background = v==='resumen' ? '#6A4B59' : '#A08A95';
-  document.getElementById('btnResumen').style.color = v==='resumen' ? 'white' : 'white';
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   var bc = document.getElementById('btnChoferes'); if(bc) { bc.style.background = v==='choferes' ? '#6A4B59' : '#A08A95'; bc.style.color = v==='choferes' ? 'white' : 'white'; }
   document.getElementById('viewProducto').style.display = v==='producto' ? 'grid' : 'none';
   document.getElementById('viewTienda').style.display = v==='tienda' ? 'grid' : 'none';
@@ -4380,6 +4392,30 @@ function collectResumenPivot(mode){
     });
   });
 
+    // INJECT: Ensure products with captured projections are shown even if they have no POS history
+    var modeKey = state.resumenMode === 'semanas' ? 'sem' : 'norm';
+    var capData = (window._captureProjections && window._captureProjections[modeKey]) || {};
+    Object.keys(capData).forEach(function(k) {
+      var parts = k.split('\x00');
+      var product = parts[0];
+      var store = parts[1];
+      
+      if (tiendas.indexOf(store) === -1) return;
+      if (prods.indexOf(product) === -1) return;
+      
+      var hasRows = capData[k].rows && capData[k].rows.length > 0;
+      if (!hasRows) return;
+      
+      hasData = true;
+      
+      var r1 = pivotMode === 'producto' ? product : store;
+      var r2 = pivotMode === 'producto' ? store : product;
+      
+      if(!rowsData[r1]) rowsData[r1] = { _total:{}, subRows:{} };
+      if(!rowsData[r1].subRows[r2]) rowsData[r1].subRows[r2] = { _total:{} };
+    });
+    // END INJECT
+
   window.expandedWeeks = window.expandedWeeks || {};
   var columns = [];
   var DIAS_ABREV = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
@@ -5936,11 +5972,11 @@ function renderResumen(){
 
   if(!pivot.hasData || !pivot.primaryKeys.length){
     document.getElementById('tResumenHead').innerHTML =
-      '<tr style="background:#1a3a5c;color:#fff">' +
-      '<th style="font-size:15px;text-align:left;vertical-align:bottom;min-width:130px;padding:6px 8px;border-right:1px solid #3a5a8c">'+label1+'</th>' +
-      '<th style="font-size:15px;text-align:left;vertical-align:bottom;min-width:130px;padding:6px 8px;border-right:1px solid #3a5a8c">'+label2+'</th>' +
-      '<th style="font-size:15px;text-align:left;vertical-align:bottom;min-width:145px;padding:6px 8px;border-right:1px solid #3a5a8c">Values</th>' +
-      '<th style="font-size:15px;text-align:left;vertical-align:bottom;padding:6px 8px;">Estado</th></tr>';
+      '<tr class="bg-[#eef2f6] text-slate-800 border-slate-300 border-b border-slate-700">' +
+      '<th class="text-[13px] text-left align-bottom min-w-[130px] px-3 py-2 border-r border-slate-600 font-semibold bg-[#eef2f6] text-slate-800 border-slate-300">'+label1+'</th>' +
+      '<th class="text-[13px] text-left align-bottom min-w-[130px] px-3 py-2 border-r border-slate-600 font-semibold bg-[#eef2f6] text-slate-800 border-slate-300">'+label2+'</th>' +
+      '<th class="text-[13px] text-left align-bottom min-w-[145px] px-3 py-2 border-r border-slate-600 font-semibold bg-[#eef2f6] text-slate-800 border-slate-300">Values</th>' +
+      '<th class="text-[13px] text-left align-bottom px-3 py-2 font-semibold bg-[#eef2f6] text-slate-800 border-slate-300">Estado</th></tr>';
     document.getElementById('tResumenBody').innerHTML =
       '<tr><td colspan="4" style="text-align:center; padding:30px; font-weight:bold; color:#6b7280; background:#f9fafb;">Sin datos para la selección actual</td></tr>';
     var btnAddCapEmpty = document.getElementById('btnAddCaptureSem');
@@ -5984,11 +6020,11 @@ function renderResumen(){
     var semsResumen = getSemanasActivas().map(function(s){ return String(s); });
     if(!semsResumen.length){
       document.getElementById('tResumenHead').innerHTML =
-        '<tr style="background:#1a3a5c;color:#fff">' +
-        '<th style="font-size:15px;text-align:left;vertical-align:bottom;min-width:130px;padding:6px 8px;border-right:1px solid #3a5a8c">'+label1+'</th>' +
-        '<th style="font-size:15px;text-align:left;vertical-align:bottom;min-width:130px;padding:6px 8px;border-right:1px solid #3a5a8c">'+label2+'</th>' +
-        '<th style="font-size:15px;text-align:left;vertical-align:bottom;min-width:145px;padding:6px 8px;border-right:1px solid #3a5a8c">Values</th>' +
-        '<th style="font-size:15px;text-align:left;vertical-align:bottom;padding:6px 8px;">Estado</th></tr>';
+        '<tr class="bg-[#eef2f6] text-slate-800 border-slate-300 border-b border-slate-700">' +
+        '<th class="text-[13px] text-left align-bottom min-w-[130px] px-3 py-2 border-r border-slate-600 font-semibold bg-[#eef2f6] text-slate-800 border-slate-300">'+label1+'</th>' +
+        '<th class="text-[13px] text-left align-bottom min-w-[130px] px-3 py-2 border-r border-slate-600 font-semibold bg-[#eef2f6] text-slate-800 border-slate-300">'+label2+'</th>' +
+        '<th class="text-[13px] text-left align-bottom min-w-[145px] px-3 py-2 border-r border-slate-600 font-semibold bg-[#eef2f6] text-slate-800 border-slate-300">Values</th>' +
+        '<th class="text-[13px] text-left align-bottom px-3 py-2 font-semibold bg-[#eef2f6] text-slate-800 border-slate-300">Estado</th></tr>';
       document.getElementById('tResumenBody').innerHTML =
         '<tr><td colspan="4" style="text-align:center; padding:30px; font-weight:bold; color:#6b7280; background:#f9fafb;">Selecciona al menos una semana</td></tr>';
       var btnAddCapNoSem = document.getElementById('btnAddCaptureSem');
@@ -6015,18 +6051,29 @@ function renderResumen(){
 
     diasOrden.forEach(function(dow){
       var items = [];
-      semsResumen.forEach(function(s){
-        var fechas = Object.keys(totalsByDay[s] || {}).sort();
-        var fechaDia = null;
-        fechas.some(function(fecha){
-          var dt = parseResumenDate(fecha);
-          if(dt && dt.getDay() === dow){ fechaDia = fecha; return true; }
-          return false;
+              semsResumen.forEach(function(s){
+          var fechas = Object.keys(totalsByDay[s] || {}).sort();
+          var fechaDia = null;
+          fechas.some(function(fecha){
+            var dt = parseResumenDate(fecha);
+            if(dt && dt.getDay() === dow){ fechaDia = fecha; return true; }
+            return false;
+          });
+          // INJECT: ALWAYS show all 7 days in the capture table to prevent index shifting and missing exports.
+          if (!fechaDia && window.isoWeekDate) {
+              var year = Number(s.substring(0,4));
+              var week = Number(s.substring(4));
+              var isoDay = dow === 0 ? 7 : dow;
+              var targetDate = window.isoWeekDate(year, week, isoDay);
+              var yyyy = targetDate.getUTCFullYear();
+              var mm = ('0' + (targetDate.getUTCMonth() + 1)).slice(-2);
+              var dd = ('0' + targetDate.getUTCDate()).slice(-2);
+              fechaDia = yyyy + '-' + mm + '-' + dd;
+          }
+          if(fechaDia){
+            items.push({week:s, weekLabel:resumenSemLabel(s), key:'D'+fechaDia});
+          }
         });
-        if(fechaDia){
-          items.push({week:s, weekLabel:resumenSemLabel(s), key:'D'+fechaDia});
-        }
-      });
       if(items.length){
         dayGroups.push({dow:dow, label:diasAbrev[dow], items:items});
       }
@@ -6038,15 +6085,15 @@ function renderResumen(){
     window._captureDayGroups = dayGroups;
 
     var headSemanal =
-      '<tr style="background:#1a3a5c;color:#fff;font-size:14px;">' +
-      '<th style="font-size:15px;text-align:left;vertical-align:bottom;min-width:130px;padding:10px 8px;border-right:1px solid #3a5a8c">'+label1+'</th>' +
-      '<th style="font-size:15px;text-align:left;vertical-align:bottom;min-width:130px;padding:10px 8px;border-right:1px solid #3a5a8c">'+label2+'</th>' +
-      '<th style="font-size:15px;text-align:left;vertical-align:bottom;min-width:145px;padding:10px 8px;border-right:1px solid #3a5a8c">Values</th>';
+      '<tr class="bg-[#eef2f6] text-slate-800 border-slate-300 text-[14px] border-b border-slate-700">' +
+      '<th class="text-[13px] text-left align-bottom min-w-[130px] px-3 py-3 border-r border-slate-600 font-semibold">'+label1+'</th>' +
+      '<th class="text-[13px] text-left align-bottom min-w-[130px] px-3 py-3 border-r border-slate-600 font-semibold">'+label2+'</th>' +
+      '<th class="text-[13px] text-left align-bottom min-w-[145px] px-3 py-3 border-r border-slate-600 font-semibold">Values</th>';
 
     dayGroups.forEach(function(group){
-      headSemanal += '<th style="font-size:15px;text-align:right;width:68px;min-width:68px;max-width:68px;padding:10px 8px;font-weight:bold">'+group.label+'</th>';
+      headSemanal += '<th class="text-[13px] text-right w-[68px] min-w-[68px] max-w-[68px] px-3 py-3 font-bold border-r border-slate-600 bg-[#eef2f6] text-slate-800 border-slate-300">'+group.label+'</th>';
     });
-    headSemanal += '<th style="font-size:15px;text-align:right;width:82px;min-width:82px;vertical-align:bottom;padding:10px 8px;border-left:2px solid #4a6a9c;border-right:1px solid #3a5a8c">Total general</th></tr>';
+    headSemanal += '<th class="text-[13px] text-right w-[82px] min-w-[82px] align-bottom px-3 py-3 font-bold border-l-2 border-slate-500 border-r border-slate-600 bg-[#eef2f6] text-slate-800 border-slate-300">Total general</th></tr>';
     document.getElementById('tResumenHead').innerHTML = headSemanal;
 
     window.toggleResumenLevel = function(id){
@@ -6231,7 +6278,7 @@ function renderResumen(){
         var td = document.createElement('td');
         td.setAttribute('data-group', id1);
         td.style.cssText = 'background:'+bg+';padding:2px 4px;text-align:right;width:68px;min-width:68px;max-width:68px;vertical-align:middle';
-        td.innerHTML = '<input type="number" id="ci_'+r1i+'_'+r2i+'_'+wi+'_'+gi+'" min="0" placeholder="0" oninput="window.updateCaptureRowTotal('+r1i+','+r2i+','+wi+','+ngr+');window.syncCaptureProjFromBlock('+r1i+','+r2i+')" style="width:72px;border:2px solid #2980b9;border-radius:6px;padding:4px 6px;font-size:14px;font-weight:bold;text-align:right;background:#eef6fc;color:#0a2a4a;outline:none;box-shadow:inset 0 1px 3px rgba(0,0,0,0.1)">';
+        td.innerHTML = '<input type="number" id="ci_'+r1i+'_'+r2i+'_'+wi+'_'+gi+'" min="0" placeholder="0" oninput="window.updateCaptureRowTotal('+r1i+','+r2i+','+wi+','+ngr+');window.syncCaptureProjFromBlock('+r1i+','+r2i+')" class="w-[72px] border-2 border-blue-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-200 rounded-md px-2 py-1 text-[14px] font-bold text-right bg-blue-50 text-blue-900 outline-none shadow-inner transition-all">';
         tr.appendChild(td);
       });
       /* Total fila */
@@ -6477,14 +6524,14 @@ function renderResumen(){
         var hasProgRows = savedProgRows.length > 0;
         savedProgRows.forEach(function(progRow, progIdx){
           var isFirstProg = (progIdx === 0);
-          var progBg = r2i % 2 === 0 ? '#fff8e1' : '#fff3c3';
+          var progBg = r2i % 2 === 0 ? '#fefce8' : '#fef9c3';
           var pRow = '<tr style="background:'+progBg+';border-top:'+(isFirstProg ? borderTop : '1px solid #edf0f6')+'">';
 
           if(isFirstR2 && isFirstProg){
             pRow +=
               '<td class="'+(pivotMode === 'producto' ? 'resumen-product-name' : 'resumen-store-name')+'" rowspan="'+r1Span+'" data-r1-rowspan="'+i1+'" style="font-size:15px;font-weight:bold;vertical-align:top;'+
               'white-space:nowrap;padding:5px 8px;border-right:1px solid #c8d2e8;'+
-              'border-top:2px solid #b0bcd8;background:#eef2fa">'+
+              'border-top: 2px solid #cbd5e1; background-color: #f8fafc;">'+
               '<span data-togbtn="'+id1+'" style="'+TOG_STYLE_SEM+'" onclick="toggleResumenLevel(\''+id1+'\')">−</span>'+r1Key+'</td>';
           }
 
@@ -6498,15 +6545,15 @@ function renderResumen(){
           pRow += '<td data-group="'+id1+'" style="position:static;background:'+progBg+';padding:3px 6px;white-space:nowrap;'+
             'font-size:15px;font-weight:600;color:#e65100;border-right:1px solid #e0e6f0;text-align:left">Programado '+
             '<span style="font-size:13px;font-weight:bold;color:#333;background:#ffe082;border-radius:3px;padding:1px 5px">'+(progRow.sem || '')+'</span>'+
-            '<button type="button" onclick="_deleteProgramadoRow(\''+r1Key+'\',\''+r2Key+'\','+progIdx+',\'sem\',\''+(progRow.sem || '')+'\')" style="margin-left:6px;font-size:11px;background:transparent;border:none;cursor:pointer;color:#c62828"><i class="fa-solid fa-trash" style="color: #9ca3af; font-size: 11px;"></i></button>'+
+            '<button type="button" onclick="_deleteProgramadoRow(\''+r1Key+'\',\''+r2Key+'\','+progIdx+',\'sem\',\''+(progRow.sem || '')+'\')" class="ml-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded p-1 transition-colors outline-none"><i class="fa-solid fa-trash" style="font-size:11px; color:#ef4444;"></i></button>'+
             '</td>';
 
           dayGroups.forEach(function(group, gi){
             var v = progRow.values[gi] !== undefined ? progRow.values[gi] : '';
             var fv = v !== '' ? fmt(parseFloat(v)||0) : '';
-            pRow += '<td data-group="'+id1+'" style="font-size:14px;color:#e65100;background:'+progBg+';text-align:right;width:68px;min-width:68px;max-width:68px;padding:3px 8px;vertical-align:middle">'+
+            pRow += '<td data-group="'+id1+'" style="font-size:13px; font-weight: 500; color:#b45309; background:'+progBg+';text-align:right;width:68px;min-width:68px;max-width:68px;padding:3px 8px;vertical-align:middle">'+
               (fv||'') +
-              '<button type="button" onclick="_editProgramadoRow(\''+r1Key+'\',\''+r2Key+'\','+progIdx+','+gi+',\'sem\',\''+(progRow.sem || '')+'\')" style="margin-left:2px;font-size:10px;background:transparent;border:none;cursor:pointer;color:#1565c0"><i class="fa-solid fa-pencil" style="color:#e67e22;"></i></button>' +
+              '<button type="button" onclick="_editProgramadoRow(\''+r1Key+'\',\''+r2Key+'\','+progIdx+','+gi+',\'sem\',\''+(progRow.sem || '')+'\')" style="margin-left:2px;font-size:10px;background:transparent;border:none;cursor:pointer;color:#1565c0"><i class="fa-solid fa-pencil" style="font-size:11px; color:#f59e0b;"></i></button>' +
               '</td>';
           });
 
@@ -6641,7 +6688,7 @@ function _getDateKeyFromSemDay(sem, dayStr) {
                   cfRowStr +=
                     '<td class="'+(pivotMode === 'producto' ? 'resumen-product-name' : 'resumen-store-name')+'" rowspan="'+r1Span+'" data-r1-rowspan="'+i1+'" style="font-size:15px;font-weight:bold;vertical-align:top;'+
                     'white-space:nowrap;padding:5px 8px;border-right:1px solid #c8d2e8;'+
-                    'border-top:2px solid #b0bcd8;background:#eef2fa">'+
+                    'border-top: 2px solid #cbd5e1; background-color: #f8fafc;">'+
                     '<span data-togbtn="'+id1+'" style="'+TOG_STYLE_SEM+'" onclick="toggleResumenLevel(\''+id1+'\')">−</span>'+r1Key+'</td>';
               }
               if (!hasProgRows && cfSemIdx === 0) {
@@ -6683,7 +6730,7 @@ function _getDateKeyFromSemDay(sem, dayStr) {
             aiRow +=
               '<td class="'+(pivotMode === 'producto' ? 'resumen-product-name' : 'resumen-store-name')+'" rowspan="'+r1Span+'" data-r1-rowspan="'+i1+'" style="font-size:15px;font-weight:bold;vertical-align:top;'+
               'white-space:nowrap;padding:5px 8px;border-right:1px solid #c8d2e8;'+
-              'border-top:2px solid #b0bcd8;background:#eef2fa">'+
+              'border-top: 2px solid #cbd5e1; background-color: #f8fafc;">'+
               '<span data-togbtn="'+id1+'" style="'+TOG_STYLE_SEM+'" onclick="toggleResumenLevel(\''+id1+'\')">−</span>'+r1Key+'</td>';
           }
           if(!hasProgRows && !state.showCuartoFrio){
@@ -6713,7 +6760,7 @@ function _getDateKeyFromSemDay(sem, dayStr) {
             rowHTML +=
               '<td class="'+(pivotMode === 'producto' ? 'resumen-product-name' : 'resumen-store-name')+'" rowspan="'+r1Span+'" data-r1-rowspan="'+i1+'" style="font-size:15px;font-weight:bold;vertical-align:top;'+
               'white-space:nowrap;padding:5px 8px;border-right:1px solid #c8d2e8;'+
-              'border-top:2px solid #b0bcd8;background:#eef2fa">'+
+              'border-top: 2px solid #cbd5e1; background-color: #f8fafc;">'+
               '<span data-togbtn="'+id1+'" style="'+TOG_STYLE_SEM+'" onclick="toggleResumenLevel(\''+id1+'\')">−</span>'+r1Key+'</td>';
           }
 
@@ -6806,7 +6853,7 @@ function _getDateKeyFromSemDay(sem, dayStr) {
               dayGroups.forEach(function(group, gi){
                 /* Siempre mostrar input, independientemente de si hay dato */
                 var inputId = 'ci_'+i1+'_'+r2i+'_'+wi+'_'+gi;
-                capRow += '<td data-group="'+id1+'" style="background:'+capBg+';padding:2px 4px;text-align:right;width:68px;min-width:68px;max-width:68px;vertical-align:middle"><input type="number" id="'+inputId+'" min="0" placeholder="0" oninput="window.updateCaptureRowTotal('+i1+','+r2i+','+wi+','+ngrCap+');window.syncCaptureProjFromBlock('+i1+','+r2i+')" style="width:72px;border:2px solid #2980b9;border-radius:6px;padding:4px 6px;font-size:14px;font-weight:bold;text-align:right;background:#eef6fc;color:#0a2a4a;outline:none;box-shadow:inset 0 1px 3px rgba(0,0,0,0.1)"></td>';
+                capRow += '<td data-group="'+id1+'" style="background:'+capBg+';padding:2px 4px;text-align:right;width:68px;min-width:68px;max-width:68px;vertical-align:middle"><input type="number" id="'+inputId+'" min="0" placeholder="0" oninput="window.updateCaptureRowTotal('+i1+','+r2i+','+wi+','+ngrCap+');window.syncCaptureProjFromBlock('+i1+','+r2i+')" class="w-[72px] border-2 border-blue-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-200 rounded-md px-2 py-1 text-[14px] font-bold text-right bg-blue-50 text-blue-900 outline-none shadow-inner transition-all"></td>';
               });
               var totId = 'ct_'+i1+'_'+r2i+'_'+wi;
               capRow += '<td id="'+totId+'" data-group="'+id1+'" style="font-size:14px;font-weight:bold;color:#0d47a1;background:'+capBg+';text-align:right;width:82px;min-width:82px;padding:3px 8px;border-left:2px solid #4a6a9c">0</td>';
@@ -6928,7 +6975,7 @@ function _getDateKeyFromSemDay(sem, dayStr) {
     window._nextSemanaProyeccion = _getBaseNextSemanaProyeccion();
   }
   var headHTML =
-    '<tr style="background:#1a3a5c;color:#fff;font-size:14px;">' +
+    '<tr class="bg-[#eef2f6] text-slate-800 border-slate-300 text-[14px] border-b border-slate-700">' +
     '<th rowspan="2" style="font-size:15px;text-align:left;vertical-align:bottom;min-width:130px;padding:10px 8px;border-right:1px solid #3a5a8c">'+label1+'</th>' +
     '<th rowspan="2" style="font-size:15px;text-align:left;vertical-align:bottom;min-width:130px;padding:10px 8px;border-right:1px solid #3a5a8c">'+label2+'</th>' +
     '<th rowspan="2" style="font-size:15px;text-align:left;vertical-align:bottom;min-width:145px;padding:10px 8px;border-right:1px solid #3a5a8c">Values</th>' +
@@ -6940,10 +6987,10 @@ function _getDateKeyFromSemDay(sem, dayStr) {
     if(col.type === 'week'){
       var isExpanded = window.expandedWeeks[col.rawWeek];
       var icon = isExpanded ? '−' : '+';
-      headHTML += '<th style="font-size:15px;text-align:right;min-width:68px;padding:8px;font-weight:bold;cursor:pointer" '+
-                  'onclick="toggleWeekColumn(\''+col.rawWeek+'\')">'+col.label+' <span style="font-size:10px;color:#a0b8e0;vertical-align:middle">['+icon+']</span></th>';
+      headHTML += '<th class="text-[13px] text-right min-w-[68px] px-2 py-2 font-bold cursor-pointer border-r border-slate-600 bg-[#eef2f6] text-slate-800 border-slate-300 hover:bg-slate-200" '+
+                  'onclick="toggleWeekColumn(\''+col.rawWeek+'\')">'+col.label+' <span class="text-[10px] text-slate-400 align-middle">['+icon+']</span></th>';
     } else {
-      headHTML += '<th style="font-size:15px;text-align:right;min-width:68px;padding:8px;font-weight:normal;background:#142d4c;color:#c0d4ea;border-left:1px solid #2a4a7c">'+col.label+'</th>';
+      headHTML += '<th class="text-sm text-right min-w-[68px] px-2 py-2 font-normal bg-slate-900 text-slate-400 border-l border-slate-700 border-r border-slate-700/50">'+col.label+'</th>';
     }
   });
   headHTML += '</tr>';
@@ -6970,6 +7017,7 @@ function _getDateKeyFromSemDay(sem, dayStr) {
   };
 
   window.toggleWeekColumn = function(s){
+
     window.expandedWeeks = window.expandedWeeks || {};
     window.expandedWeeks[s] = !window.expandedWeeks[s];
     renderResumen();
@@ -7112,7 +7160,7 @@ function _getDateKeyFromSemDay(sem, dayStr) {
       var td = document.createElement('td');
       td.setAttribute('data-group', tr.getAttribute('data-group'));
       td.style.cssText = 'background:'+bg+';padding:2px 4px;text-align:right;vertical-align:middle;width:68px;min-width:68px;max-width:68px';
-      td.innerHTML = '<input type="number" id="cin_'+r1i+'_'+r2i+'_'+rowi+'_'+ci+'" min="0" placeholder="0" oninput="window.updateCaptureNormalTotal('+r1i+','+r2i+','+rowi+','+ncols+');window.syncCaptureProjFromBlock('+r1i+','+r2i+')" style="width:72px;border:2px solid #2980b9;border-radius:6px;padding:4px 6px;font-size:14px;font-weight:bold;text-align:right;background:#eef6fc;color:#0a2a4a;outline:none;box-shadow:inset 0 1px 3px rgba(0,0,0,0.1)">';
+      td.innerHTML = '<input type="number" id="cin_'+r1i+'_'+r2i+'_'+rowi+'_'+ci+'" min="0" placeholder="0" oninput="window.updateCaptureNormalTotal('+r1i+','+r2i+','+rowi+','+ncols+');window.syncCaptureProjFromBlock('+r1i+','+r2i+')" class="w-[72px] border-2 border-blue-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-200 rounded-md px-2 py-1 text-[14px] font-bold text-right bg-blue-50 text-blue-900 outline-none shadow-inner transition-all">';
       tr.appendChild(td);
     }
     var tdTot = document.createElement('td');
@@ -7274,14 +7322,14 @@ function _getDateKeyFromSemDay(sem, dayStr) {
       /* ── Filas Programado (modo normal) ── */
       savedProgRowsN.forEach(function(progRow, progIdx){
         var isFirstProg = (progIdx === 0);
-        var progBg = r2i % 2 === 0 ? '#fff8e1' : '#fff3c3';
+        var progBg = r2i % 2 === 0 ? '#fefce8' : '#fef9c3';
         var pRow = '<tr style="background:'+progBg+';border-top:'+(isFirstProg ? borderTop : '1px solid #edf0f6')+'">';
 
         if(isFirstR2 && isFirstProg){
           pRow +=
             '<td rowspan="'+r1Span+'" data-r1-rowspan="'+i1+'" style="font-size:15px;font-weight:bold;vertical-align:top;'+
             'white-space:nowrap;padding:5px 8px;border-right:1px solid #c8d2e8;'+
-            'border-top:2px solid #b0bcd8;background:#eef2fa">'+
+            'border-top: 2px solid #cbd5e1; background-color: #f8fafc;">'+
             '<span data-togbtn="'+id1+'" style="'+TOG_STYLE+'" onclick="toggleResumenLevel(\''+id1+'\')">−</span>'+
             r1Key+'</td>';
         }
@@ -7296,20 +7344,20 @@ function _getDateKeyFromSemDay(sem, dayStr) {
         pRow += '<td data-group="'+id1+'" style="position:static;background:'+progBg+';padding:3px 6px;white-space:nowrap;'+
           'font-size:15px;font-weight:600;color:#e65100;border-right:1px solid #e0e6f0;text-align:left">Programado '+
           '<span style="font-size:13px;font-weight:bold;color:#333;background:#ffe082;border-radius:3px;padding:1px 5px">'+(progRow.sem || '')+'</span>'+
-          '<button type="button" onclick="_deleteProgramadoRow(\''+r1Key+'\',\''+r2Key+'\','+progIdx+',\'norm\',\''+(progRow.sem || '')+'\')" style="margin-left:6px;font-size:11px;background:transparent;border:none;cursor:pointer;color:#c62828"><i class="fa-solid fa-trash" style="color: #9ca3af; font-size: 11px;"></i></button>'+
+          '<button type="button" onclick="_deleteProgramadoRow(\''+r1Key+'\',\''+r2Key+'\','+progIdx+',\'norm\',\''+(progRow.sem || '')+'\')" class="ml-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded p-1 transition-colors outline-none"><i class="fa-solid fa-trash" style="font-size:11px; color:#ef4444;"></i></button>'+
           '</td>';
 
         pivot.columns.forEach(function(col, ci){
           var v = progRow.values[ci] !== undefined ? progRow.values[ci] : '';
           var fv = v !== '' ? fmt(parseFloat(v)||0) : '';
-          pRow += '<td data-group="'+id1+'" style="font-size:14px;color:#e65100;background:'+progBg+';text-align:right;vertical-align:middle;width:68px;min-width:68px;max-width:68px;padding:3px 8px">'+
+          pRow += '<td data-group="'+id1+'" style="font-size:13px; font-weight: 500; color:#b45309; background:'+progBg+';text-align:right;vertical-align:middle;width:68px;min-width:68px;max-width:68px;padding:3px 8px">'+
             (fv||'') +
-            '<button type="button" onclick="_editProgramadoRow(\''+r1Key+'\',\''+r2Key+'\','+progIdx+','+ci+',\'norm\',\''+(progRow.sem || '')+'\')" style="margin-left:2px;font-size:10px;background:transparent;border:none;cursor:pointer;color:#1565c0"><i class="fa-solid fa-pencil" style="color:#e67e22;"></i></button>' +
+            '<button type="button" onclick="_editProgramadoRow(\''+r1Key+'\',\''+r2Key+'\','+progIdx+','+ci+',\'norm\',\''+(progRow.sem || '')+'\')" style="margin-left:2px;font-size:10px;background:transparent;border:none;cursor:pointer;color:#1565c0"><i class="fa-solid fa-pencil" style="font-size:11px; color:#f59e0b;"></i></button>' +
             '</td>';
         });
 
         var progRowTotal = progRow.values.reduce(function(s, x){ return s + (parseFloat(x)||0); }, 0);
-        pRow += '<td data-group="'+id1+'" style="font-size:14px;font-weight:bold;color:#bf360c;background:'+progBg+';text-align:right;padding:3px 8px;width:82px;min-width:82px;border-left:2px solid #e0a030">'+
+        pRow += '<td data-group="'+id1+'" class="text-[13px] font-bold text-amber-700 text-right px-2 py-1 w-[82px] min-w-[82px] border-l-2 border-amber-400" style="background:'+progBg+'">'+
           fmt(progRowTotal)+'</td>';
 
         pRow += '</tr>';
@@ -7327,7 +7375,7 @@ function _getDateKeyFromSemDay(sem, dayStr) {
           rowHTML +=
             '<td rowspan="'+r1Span+'" data-r1-rowspan="'+i1+'" style="font-size:15px;font-weight:bold;vertical-align:top;'+
             'white-space:nowrap;padding:5px 8px;border-right:1px solid #c8d2e8;'+
-            'border-top:2px solid #b0bcd8;background:#eef2fa">'+
+            'border-top: 2px solid #cbd5e1; background-color: #f8fafc;">'+
             '<span data-togbtn="'+id1+'" style="'+TOG_STYLE+'" onclick="toggleResumenLevel(\''+id1+'\')">−</span>'+
             r1Key+
             '</td>';
@@ -7393,7 +7441,7 @@ function _getDateKeyFromSemDay(sem, dayStr) {
           capRow2 += '</td>';
           pivot.columns.forEach(function(col, ci){
             var inputId2 = 'cin_'+i1+'_'+r2i+'_0_'+ci;
-            capRow2 += '<td data-group="'+id1+'" style="background:'+ncapBg+';padding:2px 4px;text-align:right;vertical-align:middle;width:68px;min-width:68px;max-width:68px"><input type="number" id="'+inputId2+'" min="0" placeholder="0" oninput="window.updateCaptureNormalTotal('+i1+','+r2i+',0,'+nCols+');window.syncCaptureProjFromBlock('+i1+','+r2i+')" style="width:72px;border:2px solid #2980b9;border-radius:6px;padding:4px 6px;font-size:14px;font-weight:bold;text-align:right;background:#eef6fc;color:#0a2a4a;outline:none;box-shadow:inset 0 1px 3px rgba(0,0,0,0.1)"></td>';
+            capRow2 += '<td data-group="'+id1+'" style="background:'+ncapBg+';padding:2px 4px;text-align:right;vertical-align:middle;width:68px;min-width:68px;max-width:68px"><input type="number" id="'+inputId2+'" min="0" placeholder="0" oninput="window.updateCaptureNormalTotal('+i1+','+r2i+',0,'+nCols+');window.syncCaptureProjFromBlock('+i1+','+r2i+')" class="w-[72px] border-2 border-blue-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-200 rounded-md px-2 py-1 text-[14px] font-bold text-right bg-blue-50 text-blue-900 outline-none shadow-inner transition-all"></td>';
           });
           var nTotId = 'ctn_'+i1+'_'+r2i+'_0';
           capRow2 += '<td id="'+nTotId+'" data-group="'+id1+'" style="font-size:14px;font-weight:bold;color:#0d47a1;background:'+ncapBg+';text-align:right;padding:3px 8px;width:82px;min-width:82px;border-left:2px solid #4a6a9c">0</td>';
@@ -7417,18 +7465,18 @@ function _getDateKeyFromSemDay(sem, dayStr) {
   /* ── GRAND TOTAL ROWS (one per metric) ───────────────────────────── */
   var totalRowsGroupNorm = [];
   defsAll.forEach(function(def, di){
-    var rowHTML = '<tr class="pivot-total" style="background:#1a3a5c;color:#fff">';
+    var rowHTML = '<tr class="pivot-total bg-slate-200 text-slate-900 font-bold border-t border-slate-300">';
     if(di === 0){
       rowHTML +=
         '<td colspan="2" rowspan="'+defsAll.length+'" '+
         'style="font-size:16px;vertical-align:middle;padding:5px 8px;font-weight:bold;border-right:1px solid #3a5a8c">'+
         'Total general</td>';
     }
-    rowHTML += '<td style="position:static;background:#1a3a5c;padding:3px 8px;font-size:15px;font-weight:bold;">'+def.label+'</td>';
+    rowHTML += '<td class="px-3 py-2 border-r border-slate-300 font-bold text-[13px] bg-slate-200">'+def.label+'</td>';
     pivot.columns.forEach(function(col){
       var isDaily = col.type === 'day';
       var v = cellVal(def, pivot.totalsByColumn[col.key], isDaily);
-      rowHTML += '<td style="font-size:14px;position:static;background:#1a3a5c;color:#000;text-align:right;padding:3px 8px">'+(v||(def.key==='sell_thru'?'0.0%':'0'))+'</td>';
+      rowHTML += '<td class="text-[13px] text-right px-2 py-2 border-r border-slate-300 bg-slate-200">'+(v||(def.key==='sell_thru'?'0.0%':'0'))+'</td>';
     });
     /* Grand total for this metric across all columns */
     var gV=0, gE=0, gX=0;
@@ -9034,4 +9082,342 @@ window.importGeminiExcel = function(event) {
         script.onerror = function() { alert("❌ No se pudo cargar la librería para leer Excel. Verifica tu conexión a internet."); };
         document.head.appendChild(script);
     }
+};
+
+
+
+    window.cellNumber = function(cell) {
+        if (!cell) return 0;
+        var text = (cell.textContent || '').trim();
+        var num = parseInt(text, 10);
+        return isNaN(num) ? 0 : num;
+    };
+
+    window.parseWeek = function(weekStr) {
+        var str = String(weekStr || '').trim();
+        if (!str) return null;
+        var num = parseInt(str, 10);
+        if (isNaN(num)) return null;
+        var yearMatch = str.match(/20\d{2}/);
+        var year = yearMatch ? parseInt(yearMatch[0], 10) : new Date().getFullYear();
+        return { week: num, year: year, key: year + '-W' + (num < 10 ? '0'+num : num) };
+    };
+
+    window.setPickerWeeks = function() {
+        var select = document.getElementById('fposWeekSelect');
+        if (!select) return [];
+        var rows = window.collectProgrammed();
+        var weeks = {};
+        rows.forEach(function (row) { weeks[row.weekKey] = row; });
+        select.innerHTML = '';
+        Object.keys(weeks).sort().forEach(function (key) {
+            var row = weeks[key];
+            var option = document.createElement('option');
+            option.value = key;
+            option.textContent = 'Semana ' + row.week;
+            select.appendChild(option);
+        });
+        return rows;
+    };
+
+    window.toggleFposSubmenu = function (event) {
+        if (event) event.stopPropagation();
+        var submenu = document.getElementById('fposSubmenu');
+        var picker = document.getElementById('fposPickerMenu');
+        if (!submenu) return;
+        submenu.style.display = submenu.style.display === 'block' ? 'none' : 'block';
+        if (picker) picker.style.display = 'none';
+    };
+
+    window.showFposPicker = function (mode, event) {
+        if (event) event.stopPropagation();
+        window.fposMode = mode === 'day' ? 'day' : 'week';
+        var rows = window.setPickerWeeks();
+        if (!rows.length) {
+            alert('No se encontraron cantidades programadas visibles para exportar.');
+            return;
+        }
+        var picker = document.getElementById('fposPickerMenu');
+        var dayField = document.getElementById('fposDayField');
+        var title = document.getElementById('fposPickerTitle');
+        if (dayField) dayField.style.display = window.fposMode === 'day' ? 'block' : 'none';
+        if (title) title.textContent = window.fposMode === 'day' ? 'Exportar por dia' : 'Exportar por semana';
+        if (picker) picker.style.display = 'block';
+    };
+
+    window.loadXlsx = function(callback) {
+        if (window.XLSX) return callback();
+        var existing = document.querySelector('script[data-fpos-xlsx]');
+        if (existing) {
+            existing.addEventListener('load', callback, { once: true });
+            return;
+        }
+        var script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+        script.setAttribute('data-fpos-xlsx', '1');
+        script.onload = callback;
+        document.head.appendChild(script);
+    };
+
+    window.ddmmyyyy = function(d, sep) {
+        if (!(d instanceof Date) || isNaN(d)) return '';
+        var dd = d.getUTCDate();
+        var mm = d.getUTCMonth() + 1;
+        var yyyy = d.getUTCFullYear();
+        return (dd < 10 ? '0'+dd : dd) + sep + (mm < 10 ? '0'+mm : mm) + sep + yyyy;
+    };
+
+    window.isoWeekDate = function(year, week, dayIndex) {
+        var simple = new Date(year, 0, 1 + (week - 1) * 7);
+        var dow = simple.getDay();
+        var ISOweekStart = simple;
+        if (dow <= 4)
+            ISOweekStart.setDate(simple.getDate() - simple.getDay() + 1);
+        else
+            ISOweekStart.setDate(simple.getDate() + 8 - simple.getDay());
+        
+        var target = new Date(ISOweekStart.getTime());
+        target.setDate(ISOweekStart.getDate() + dayIndex - 1);
+        return target;
+    };
+
+
+window.STORE_INFO = {
+    "PLAZA SAN PEDRO": ["1140", "WALMART 1140 Plaza San Pedro"],
+    "PLAYAS DE TIJUANA": ["1613", "WALMART 1613 Playas De Tijuana"],
+    "PACIFICO": ["1616", "WALMART 1616 Pacifico"],
+    "MEXICALI NOVENA": ["1617", "WALMART 1617 Novena"],
+    "NOVENA": ["1617", "WALMART 1617 Novena"],
+    "LOMAS DE SANTA FE": ["190", "WALMART 190 Lomas de Santa Fe"],
+    "MACROPLAZA INSURGENTES": ["2023", "WALMART 2023 Macro Plaza Insurgentes"],
+    "MACRO PLAZA INSURGENTES": ["2023", "WALMART 2023 Macro Plaza Insurgentes"],
+    "MEXICALI": ["2304", "WALMART 2304 Mexicali"],
+    "ENSENADA CENTRO": ["2947", "WALMART 2947 Ensenada Centro"],
+    "ENSENADA": ["3015", "WALMART 3015 Ensenada"],
+    "DIAZ ORDAZ": ["3664", "WALMART 3664 Diaz Ordaz"],
+    "TIJUANA HIPODROMO": ["4011", "WALMART 4011 Tijuana Hipodromo"],
+    "GALERIAS DEL VALLE": ["4026", "WALMART 4026 Galerías Del Valle"],
+    "GALERÍAS DEL VALLE": ["4026", "WALMART 4026 Galerías Del Valle"],
+    "TIJUANA 2000": ["4155", "WALMART 4155 Tijuana 2000"],
+    "ROSARITO": ["4187", "WALMART 4187 Rosarito"],
+    "NUEVO MEXICALI": ["5041", "WALMART 5041 Nuevo Mexicali"],
+    "TECATE GARITA": ["5295", "WALMART 5295 Tecate Garita"]
+};
+
+window.PRODUCT_INFO = {
+    "BQT ROSAS 12T": ["DOCENA ROSAS 2 FILLERS", 8],
+    "BQT ROSAS 6T": ["MEDIA DOCENA ROSAS 2 FILLERS", 10],
+    "BQT MIXTO 12T": ["WALMEX Bqt Mixto 12 st pk 8", 8],
+    "BQT MIXTO 15T": ["WALMEX Bqt Mixto 15 st pk 6", 6],
+    "BQT MIXTO 9T": ["WALMEX Bqt Mixto 9 st pk 10", 10],
+    "BQT SNAPDRAGON 8T": ["WALMEX Bqt snapdragon pk8", 8],
+    "WALMEX MIX ROSAS PK10": ["Walmex Mix Rosas PK10", 10]
+};
+
+window.ddmmyyyy4 = function(dateStr, sep) {
+    if (!dateStr) return '';
+    var d = new Date(dateStr);
+    var day = ('0' + d.getUTCDate()).slice(-2);
+    var month = ('0' + (d.getUTCMonth() + 1)).slice(-2);
+    var year = d.getUTCFullYear();
+    return day + sep + month + sep + year;
+};
+
+
+window.collectProgrammed = function() {
+      // INJECT: Use current view mode regardless of day/week export choice
+      var modeKey = state.resumenMode === 'semanas' ? 'sem' : 'norm';
+    var storeData = (window._captureProjections && window._captureProjections[modeKey]) || {};
+    var dayGroups = window._captureDayGroups || [];
+    
+    // Fallback si no hay dayGroups generados
+    if (!dayGroups.length) {
+        var diasOrden = [1,2,3,4,5,6,0];
+        var diasAbrev = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+        dayGroups = diasOrden.map(function(d) { return { dow: d, label: diasAbrev[d] }; });
+    }
+
+    var grouped = {};
+
+    Object.keys(storeData).forEach(function(sk) {
+        // sk is prod + '\x00' + tienda
+        var parts = sk.split('\x00');
+        if (parts.length < 2) return;
+        var product = parts[0];
+        var store = parts[1];
+        
+        var entry = storeData[sk];
+        if (!entry || !entry.rows) return;
+        
+        entry.rows.forEach(function(row) {
+            var semRaw = String(row.sem || '').trim();
+            if (!semRaw) return;
+            var parsed = window.parseWeek(semRaw);
+            if (!parsed || !parsed.week) return;
+
+            (row.values || []).forEach(function(val, gi) {
+                if (gi >= dayGroups.length) return;
+                var group = dayGroups[gi];
+                var dayIndex = group.dow;
+                if (dayIndex === null) return;
+                
+                // Dow from dayGroups: 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 0=Sun
+                // Convert 0 (Sun) to 7 for isoWeekDate
+                var isoDay = dayIndex === 0 ? 7 : dayIndex;
+
+                var pieces = parseFloat(String(val).replace(/,/g, ''));
+                if (isNaN(pieces) || pieces <= 0) return;
+
+                var key = store + '|' + product + '|' + parsed.key + '|' + isoDay;
+                if (!grouped[key]) {
+                    grouped[key] = {
+                        store: store,
+                        product: product,
+                        year: parsed.year,
+                        week: parsed.week,
+                        weekKey: parsed.key,
+                        day: isoDay,
+                        pieces: 0
+                    };
+                }
+                grouped[key].pieces += pieces;
+            });
+        });
+    });
+
+    var groups = {};
+    Object.keys(grouped).forEach(function(k) {
+        var row = grouped[k];
+        var groupKey = row.store + '|' + row.weekKey + '|' + row.day;
+        if (!groups[groupKey]) groups[groupKey] = [];
+        groups[groupKey].push(row);
+    });
+
+          var prepared = [];
+      Object.keys(groups).forEach(function (key) {
+          var roseRows = [];
+          groups[key].forEach(function (row) {
+              var pack = row.product === 'BQT ROSAS 12T' ? 8 : row.product === 'BQT ROSAS 6T' ? 10 : 0;
+              if (!pack) { prepared.push(row); return; }
+              roseRows.push(Object.assign({}, row)); // Clone to avoid mutating original
+          });
+          
+          var remainderTotal = 0;
+          roseRows.forEach(function(row) {
+              var pack = row.product === 'BQT ROSAS 12T' ? 8 : 10;
+              remainderTotal += row.pieces % pack;
+          });
+          
+          var mixPieces = Math.floor(remainderTotal / 10) * 10;
+          
+          if (mixPieces > 0 && roseRows.length > 0) {
+              prepared.push(Object.assign({}, roseRows[0], { product: 'WALMEX MIX ROSAS PK10', pieces: mixPieces }));
+              var pending = mixPieces;
+              
+              roseRows.forEach(function(row) {
+                  var pack = row.product === 'BQT ROSAS 12T' ? 8 : 10;
+                  var remainder = row.pieces % pack;
+                  
+                  if (remainder > 0 && pending > 0) {
+                      var consumed = Math.min(remainder, pending);
+                      row.pieces -= consumed;
+                      pending -= consumed;
+                  }
+                  
+                  if (row.pieces > 0) {
+                      prepared.push(row);
+                  }
+              });
+          } else {
+              roseRows.forEach(function(row) {
+                  prepared.push(row);
+              });
+          }
+      });
+
+    return prepared;
+};
+
+window.exportFposSelection = function (event) {
+    if (event) event.stopPropagation();
+    var weekKey = document.getElementById('fposWeekSelect') ? document.getElementById('fposWeekSelect').value : null;
+    var selectedDay = document.getElementById('fposDaySelect') ? Number(document.getElementById('fposDaySelect').value) : null;
+    
+    var source = window.collectProgrammed();
+    if (weekKey) {
+        source = source.filter(function (row) {
+            return row.weekKey === weekKey && (window.fposMode !== 'day' || row.day === selectedDay);
+        });
+    }
+
+    if (!source.length) {
+        alert('No hay programado para la seleccion elegida.');
+        return;
+    }
+    
+    var headers = ['Distribuidor', 'Cust Name', 'Descripcion', 'No.', 'CATEGORIA', 'FLOR', 'Flor Color', 'Load Date', '#cajas', 'Pack', 'Stems', 'Fecha Produccion', 'Caja'];
+    var output = [headers];
+    
+    source.sort(function (a, b) {
+        return a.day - b.day || a.store.localeCompare(b.store) || a.product.localeCompare(b.product);
+    }).forEach(function (row) {
+        var s1 = row.store.trim();
+        var s2 = row.product.trim();
+        var isStore = function(s) {
+            return s.startsWith('SC') || window.STORE_INFO[s.replace(/^SC\s+/, '').replace('Í', 'I').replace('í', 'i').trim()];
+        };
+        var storeStr = isStore(s1) ? s1 : (isStore(s2) ? s2 : s1);
+        var prodStr = (storeStr === s1) ? s2 : s1;
+
+        var storeKey = storeStr.replace(/^SC\s+/, '').replace('Í', 'I').replace('í', 'i').trim();
+        var store = window.STORE_INFO[storeKey] || window.STORE_INFO[storeStr] || [storeKey, storeStr];
+        var product = window.PRODUCT_INFO[prodStr] || [prodStr, 1];
+        
+        var loadDate = window.isoWeekDate(row.year, row.week, row.day === 0 ? 7 : row.day);
+        var productionDate = new Date(loadDate);
+        productionDate.setUTCDate(productionDate.getUTCDate() - 1);
+        
+        var packValue = product[1] || 1;
+        var cajas = Math.ceil(row.pieces / packValue);
+        
+                  output.push([
+              'PACIFICA PRODUCE FARMS',
+              store[1],   // Cust Name 
+              product[0], // Descripcion 
+              store[0] + ' WALMEX ' + window.ddmmyyyy4(loadDate, ''),
+              'BOUQUETS',
+              'ASSORTED', // FLOR
+              'ROSE',     // Flor Color
+              window.ddmmyyyy4(loadDate, '/'),
+              cajas,                            // #cajas
+              row.pieces,                       // Pack (Restored as requested)
+              -1,                               // Stems (Restored as requested)
+              window.ddmmyyyy4(productionDate, '/'), // Fecha Produccion
+              'H5'                              // Caja
+          ]);
+    });
+    
+    window.loadXlsx(function () {
+        var worksheet = XLSX.utils.aoa_to_sheet(output);
+        worksheet['!cols'] = [
+            { wch: 25 }, { wch: 34 }, { wch: 34 }, { wch: 27 }, { wch: 14 },
+            { wch: 13 }, { wch: 15 }, { wch: 14 }, { wch: 9 }, { wch: 9 },
+            { wch: 9 }, { wch: 18 }, { wch: 9 }
+        ];
+        worksheet['!autofilter'] = { ref: 'A1:M' + output.length };
+        var workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'New Order');
+        var row = source[0];
+        var DAY_NAMES = ['DOMINGO', 'LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'];
+        var suffix = (window.fposMode === 'day' && selectedDay !== null) ? '_DIA_' + DAY_NAMES[selectedDay] : '_SEMANA';
+        var filenameWeek = row ? row.year + '_' + row.week : 'TODO';
+        XLSX.writeFile(workbook, 'F_POS' + suffix + '_' + filenameWeek + '.xlsx');
+        
+        var root = document.getElementById('excelDropdownMenu');
+        var submenu = document.getElementById('fposSubmenu');
+        var picker = document.getElementById('fposPickerMenu');
+        if (root) root.style.display = 'none';
+        if (submenu) submenu.style.display = 'none';
+        if (picker) picker.style.display = 'none';
+    });
 };

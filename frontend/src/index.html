@@ -12,6 +12,18 @@
 <body>
   <app-root></app-root>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-  <script src="assets/extracted_logic.js?v=104"></script>
+  <script src="assets/extracted_logic.js?v=107"></script>
+  <script>
+    window.toggleFposSubmenu = function (event) {
+      if (event) event.stopPropagation();
+      const submenu = document.getElementById('fposSubmenu');
+      const picker = document.getElementById('fposPickerMenu');
+      if (submenu) {
+        submenu.style.display = submenu.style.display === 'block' ? 'none' : 'block';
+      }
+      if (picker) picker.style.display = 'none';
+    };
+  </script>
 </body>
 </html>
+

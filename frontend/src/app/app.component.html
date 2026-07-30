@@ -26,12 +26,12 @@
 <div class="global-sticky-header" style="position: fixed; top: 0; left: 0; width: 100%; z-index: 6000; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
 <div class="hdr">
 <div style="margin-top:12px; display:flex; gap:8px;">
-<button id="btnProd" onclick="setView('producto')" style="padding:6px 12px; background:#6A4B59; color:white; border:1px solid #4A3540; border-bottom:3px solid #4A3540; border-radius:4px; cursor:pointer; font-weight:600;">Proyección</button>
-<button id="btnTiend" onclick="setView('tienda')" style="padding:6px 12px; background:#A08A95; color:white; border:1px solid #806A75; border-bottom:3px solid #806A75; border-radius:4px; cursor:pointer; font-weight:600;">Tienda</button>
-<button id="btnComp" onclick="setView('comparativo')" style="padding:6px 12px; background:#A08A95; color:white; border:1px solid #806A75; border-bottom:3px solid #806A75; border-radius:4px; cursor:pointer; font-weight:600;">Comparativo</button>
-<button id="btnInv" onclick="setView('inventario')" style="padding:6px 12px; background:#A08A95; color:white; border:1px solid #806A75; border-bottom:3px solid #806A75; border-radius:4px; cursor:pointer; font-weight:600;">Inventario Actual</button>
-<button id="btnGasto" onclick="setView('gasto')" style="padding:6px 12px; background:#A08A95; color:white; border:1px solid #806A75; border-bottom:3px solid #806A75; border-radius:4px; cursor:pointer; font-weight:600;">Gasto</button>
-<button id="btnResumen" onclick="setView('resumen')" style="padding:6px 12px; background:#A08A95; color:white; border:1px solid #806A75; border-bottom:3px solid #806A75; border-radius:4px; cursor:pointer; font-weight:600;">Resumen</button>
+<button id="btnProd" onclick="setView('producto')">Proyección</button>
+<button id="btnTiend" onclick="setView('tienda')">Tienda</button>
+<button id="btnComp" onclick="setView('comparativo')">Comparativo</button>
+<button id="btnInv" onclick="setView('inventario')">Inventario Actual</button>
+<button id="btnGasto" onclick="setView('gasto')">Gasto</button>
+<button id="btnResumen" onclick="setView('resumen')">Resumen</button>
 <div id="choferesDropdownWrap" style="position:relative; display:inline-block;">
 <button id="btnChoferes" onclick="toggleChoferesMenu(event)" style="padding:6px 12px; background:#A08A95; color:white; border:1px solid #806A75; border-bottom:3px solid #806A75; border-radius:4px; cursor:pointer; font-weight:600;">Choferes ▾</button>
 <div id="choferesMenu" style="display:none; position:absolute; top:100%; left:0; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:9999; min-width:160px; padding:4px 0; margin-top:2px;">
@@ -442,7 +442,7 @@
     </div>
     <div style="display:flex; gap:8px;">
         <button onclick="if(typeof window.verifyAllDevoluciones === 'function') window.verifyAllDevoluciones();" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:normal;background:#0d6efd;color:#000;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;letter-spacing:.02em;" title="Verificar todas las devoluciones listadas"><i class="fa-solid fa-check-double" style="color:#000;"></i> Verificar Todas</button>
-        <button onclick="if(typeof window.exportDevolucionesData === 'function') window.exportDevolucionesData();" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:normal;background:#198754;color:#000;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;letter-spacing:.02em;" title="Exportar a Excel"><i class="fa-solid fa-file-excel" style="color:#000;"></i> Exportar</button>
+        <button onclick="if(typeof window.exportDevolucionesData === 'function') window.exportDevolucionesData();" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:normal;background:#198754;color:#000;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;letter-spacing:.02em;" title="Exportar a Excel"><i class="fa-solid fa-file-excel" style="font-size:12px;"></i> Exportar</button>
     </div>
 </div>
 <!-- Tabla -->
@@ -511,8 +511,8 @@
 <div class="box-hdr" id="resumenTitle" style="display:flex; justify-content:flex-start; align-items:center; flex-wrap:wrap; gap:20px;">
 <span id="resumenTitleText" style="font-size:1.6em; font-weight:bold; color:#1a3a5c; margin-bottom:5px;">Resumen Diario</span>
 <div class="mode-btn-group" style="display:flex; gap:5px; align-items:center; flex-wrap:wrap; justify-content:flex-start;">
-<button id="btnAddCaptureSem" onclick="window.addCaptureRowAll()" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;background:#1565c0;color:#fff;border:none;border-radius:6px;padding:4px 11px;cursor:pointer;letter-spacing:.02em;" title="Agregar semana de captura"><span class="material-icons" style="font-size:16px">add_circle</span> SEM</button>
-<button disabled="" id="btnRemoveCaptureSem" onclick="window.removeCaptureRowAll()" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;background:#c62828;color:#fff;border:none;border-radius:6px;padding:4px 11px;cursor:pointer;opacity:0.45;letter-spacing:.02em;" title="Eliminar última semana de captura"><span class="material-icons" style="font-size:16px">remove_circle</span> SEM</button>
+<button id="btnAddCaptureSem" onclick="window.addCaptureRowAll()" class="inline-flex items-center gap-1 text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white border-none rounded-md px-2 py-1 cursor-pointer transition-colors shadow-sm" title="Agregar semana de captura"><i class="fa-solid fa-calendar-plus" style="font-size:13px;"></i> SEM</button>
+<button disabled="" id="btnRemoveCaptureSem" onclick="window.removeCaptureRowAll()" class="inline-flex items-center gap-1 text-[11px] font-bold bg-red-600 hover:bg-red-700 text-white border-none rounded-md px-2 py-1 cursor-pointer transition-colors shadow-sm disabled:opacity-50" title="Eliminar última semana de captura"><i class="fa-solid fa-calendar-minus" style="font-size:13px;"></i> SEM</button>
 
 <button id="btnToggleTotalPos" onclick="if(typeof window.toggleTotalPosition === 'function') window.toggleTotalPosition();" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;background:#eef2fa;color:#1a3a5c;border:1px solid #c8d2e8;border-radius:6px;padding:4px 11px;cursor:pointer;letter-spacing:.02em;" title="Mover Total General Arriba/Abajo"><span class="material-icons" style="font-size:16px">swap_vert</span> Total</button>
 <div id="metricFilters" style="display:inline-flex; align-items:center; gap:2px;">
@@ -523,26 +523,60 @@
 
 <button class="mode-btn active" id="btnPivotProducto" onclick="setResumenPivot('producto')">Producto</button>
 <button class="mode-btn" id="btnPivotTienda" onclick="setResumenPivot('tienda')">Tienda</button>
-<button class="mode-btn" id="btnToggleCuartoFrio" onclick="toggleCuartoFrio()" style="margin-left:10px; background-color:#e0f2fe; color:#0369a1; border-color:#bae6fd;"><i class="fa-solid fa-snowflake" style="color:#0ea5e9;"></i> Cuarto Frío</button>
+<button class="mode-btn" id="btnToggleCuartoFrio" onclick="toggleCuartoFrio()"><i class="fa-solid fa-snowflake" style="color:#0ea5e9;"></i> Cuarto Frío</button>
 <button class="mode-btn" id="btnResumenAnalisis" onclick="openResumenAnalisisTab()">Análisis</button>
 </div>
 <div style="margin-left:auto; display:flex; gap:5px; align-items:center;">
-<button id="btnSaveCaptureAll" onclick="window.saveAllCaptureRows()" style="display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:#f0f0f0 !important;border:1px solid #777 !important;border-radius:0 !important;padding:3px 6px;" title="Guardar todas las capturas visibles"><span class="material-icons" style="font-size:20px;color:#059669;">save</span></button>
-<button id="btnClearCapture" onclick="_showDeleteWeekDialog()" style="display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:#f0f0f0 !important;border:1px solid #777 !important;border-radius:0 !important;padding:3px 6px;" title="Borrar capturas guardadas (afecta a todos los usuarios)"><span class="material-icons" style="font-size:20px;color:#dc2626;">delete_sweep</span></button>
+<button id="btnSaveCaptureAll" onclick="window.saveAllCaptureRows()" title="Guardar todas las capturas visibles" class="inline-flex items-center justify-center cursor-pointer bg-white hover:bg-emerald-50 text-emerald-600 border border-emerald-200 hover:border-emerald-300 rounded-md shadow-sm px-3 py-1.5 transition-all"><span class="material-icons" style="font-size:18px">save</span></button>
+<button id="btnClearCapture" onclick="_showDeleteWeekDialog()" title="Borrar capturas guardadas (afecta a todos los usuarios)" class="inline-flex items-center justify-center cursor-pointer bg-white hover:bg-red-50 text-red-500 border border-red-200 hover:border-red-300 rounded-md shadow-sm px-3 py-1.5 transition-all ml-1"><span class="material-icons" style="font-size:18px">delete</span></button>
 <div style="position:relative; display:inline-block;" id="excelDropdownContainer">
-  <button id="btnExportCapture" onclick="window.toggleExcelDropdown(event)" aria-label="Exportar" style="display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:#f0f0f0 !important;border:1px solid #777 !important;border-radius:0 !important;padding:3px 6px;" title="Opciones de Exportación">
-    <svg class="resumen-xls-icon" viewBox="0 0 24 24" aria-hidden="true" style="width:20px;height:20px;"><path d="M7 2.5h9l4 4V21.5H7z" fill="#f7fbfa" stroke="#55786f"/><path d="M16 2.5v4h4" fill="#dcece7" stroke="#55786f"/><path d="M10 9h7M10 12h7M10 15h7M10 18h7M13.5 9v9" fill="none" stroke="#9fc9bc" stroke-width=".8"/><rect x="2.5" y="7" width="10" height="11" rx=".5" fill="#107c41" stroke="#075c31"/><path d="m5 10 1.45 2.45L5 15h1.65l.72-1.42L8.1 15h1.7l-1.5-2.57L9.7 10H8.08l-.66 1.3-.68-1.3z" fill="#fff"/></svg>
-
-  </button>
-  <div id="excelDropdownMenu" style="display:none; position:absolute; top:100%; right:0; background:white; border:1px solid #85b7d9; box-shadow:0 2px 5px rgba(0,0,0,0.2); z-index:1000; min-width:180px; text-align:left; border-radius:4px; overflow:hidden;">
-     <a href="#" onclick="event.preventDefault(); window.exportCaptureData(); window.toggleExcelDropdown(event);" style="display:flex; align-items:center; gap:8px; padding:8px 12px; text-decoration:none; color:#1a3a5c; border-bottom:1px solid #d7e1ef; font-size:10px; white-space:nowrap; font-family:Verdana, Geneva, sans-serif; font-weight:600;">
-         <i class="fa-solid fa-calendar-check" style="font-size:16px;color:#000;"></i>
-         <span>EXPORTAR PROGRAMADO</span>
+  <button id="btnExportCapture" onclick="window.toggleExcelDropdown(event)" aria-label="Exportar" title="Opciones de Exportación" class="inline-flex items-center justify-center cursor-pointer bg-[#28a745] hover:bg-[#218838] text-white rounded-md shadow-sm w-[28px] h-[28px] transition-all ml-1">
+              <i class="fa-solid fa-file-excel" style="font-size:14px;"></i>
+          </button>
+  <div id="excelDropdownMenu" class="absolute right-0 mt-1 w-44 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-50 "  style="display:none;" role="menu" aria-label="Opciones de exportaci├│n">
+     <a href="#" role="menuitem" onclick="event.preventDefault(); window.exportCaptureData(); window.toggleExcelDropdown(event);" class="flex items-center gap-2 w-full px-3 py-1.5 text-[11px] font-medium normal-case tracking-normal text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors">
+         <i class="fa-solid fa-calendar-check" style="font-size:11px;"></i>
+         <span>Exportar programado</span>
      </a>
-     <a href="#" onclick="event.preventDefault(); window.exportResumenData(); window.toggleExcelDropdown(event);" style="display:flex; align-items:center; gap:8px; padding:8px 12px; text-decoration:none; color:#1a3a5c; font-size:10px; white-space:nowrap; font-family:Verdana, Geneva, sans-serif; font-weight:600;">
-         <i class="fa-solid fa-file-excel" style="font-size:16px;color:#000;"></i>
-         <span>EXPORTAR RESUMEN</span>
+     <a href="#" role="menuitem" onclick="event.preventDefault(); window.exportResumenData(); window.toggleExcelDropdown(event);" class="flex items-center gap-2 w-full px-3 py-1.5 text-[11px] font-medium normal-case tracking-normal text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors">
+         <i class="fa-solid fa-file-excel" style="font-size:12px;"></i>
+         <span>Exportar resumen</span>
      </a>
+     <div class="fpos-export-wrapper">
+       <button type="button" class="flex items-center gap-2 w-full px-3 py-1.5 text-[11px] font-medium normal-case tracking-normal text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors fpos-export-trigger" onclick="window.toggleFposSubmenu(event)">
+         <i class="fa-solid fa-file-arrow-down" style="font-size:12px;" aria-hidden="true"></i>
+         <span>Exportar F.Pos</span>
+         <i class="fa-solid fa-chevron-right fpos-chevron" style="font-size:9px;" aria-hidden="true"></i>
+       </button>
+       <div id="fposSubmenu" class="fpos-submenu" style="display:none;">
+         <button type="button" class="flex items-center gap-2 w-full px-3 py-1.5 text-[11px] font-medium normal-case tracking-normal text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors" onclick="window.showFposPicker('day', event)">
+           <i class="fa-solid fa-calendar-day" style="font-size:11px; margin-right:6px;"></i><span>Día</span>
+         </button>
+         <button type="button" class="flex items-center gap-2 w-full px-3 py-1.5 text-[11px] font-medium normal-case tracking-normal text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors" onclick="window.showFposPicker('week', event)">
+           <i class="fa-solid fa-calendar-day" style="font-size:11px; margin-right:6px;"></i><span>Semana</span>
+         </button>
+       </div>
+       <div id="fposPickerMenu" class="absolute right-0 mt-1 w-44 rounded-md shadow-xl bg-white border border-gray-200 p-3 z-50 flex flex-col gap-2" style="display:none;" onclick="event.stopPropagation()">
+         <div id="fposPickerTitle" class="text-[11px] font-bold text-gray-800 border-b border-gray-200 pb-1 mb-1 normal-case tracking-normal">Exportar F.Pos</div>
+         <label for="fposWeekSelect" class="text-[10px] text-gray-600 block mb-0.5">Semana</label>
+         <select id="fposWeekSelect" class="w-full text-[11px] px-1.5 py-1 rounded border border-gray-300"></select>
+         <div id="fposDayField">
+           <label for="fposDaySelect" class="text-[10px] text-gray-600 block mb-0.5">Día</label>
+           <select id="fposDaySelect" class="w-full text-[11px] px-1.5 py-1 rounded border border-gray-300">
+               <option value="1">Lunes</option>
+               <option value="2">Martes</option>
+               <option value="3">Miércoles</option>
+               <option value="4">Jueves</option>
+               <option value="5">Viernes</option>
+               <option value="6">Sábado</option>
+               <option value="0">Domingo</option>
+             </select>
+         </div>
+         <button type="button" class="mt-1 w-full flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 rounded text-[11px] font-semibold transition-colors shadow-sm" onclick="window.exportFposSelection(event)">
+           <i class="fa-solid fa-file-excel" style="font-size:12px;"></i> Exportar
+         </button>
+       </div>
+     </div>
   </div>
 </div>
 </div>
