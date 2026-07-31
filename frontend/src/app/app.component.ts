@@ -63,71 +63,87 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   constructor(private http: HttpClient) {}
 
   onFilterChange(source: 'cfbc' | 'wm', field: 'desde' | 'hasta' | 'tienda' | 'producto' | 'estado') {
-    const prefix = source === 'cfbc' ? 'cfbc' : 'wm';
     const w = window as any;
 
-    if (field === 'desde' || field === 'hasta') {
-      const val = source === 'cfbc' 
-          ? (field === 'desde' ? this.cfbcDesdeDate : this.cfbcHastaDate) 
-          : (field === 'desde' ? this.wmDesdeDate : this.wmHastaDate);
-      
-      const el = document.getElementById(prefix + (field === 'desde' ? 'Desde' : 'Hasta')) as HTMLInputElement;
-      if (el) {
-          if (val) {
-              const d = new Date(val);
-              // Format YYYY-MM-DD local time
-              const y = d.getFullYear();
-              const m = String(d.getMonth() + 1).padStart(2, '0');
-              const day = String(d.getDate()).padStart(2, '0');
-              el.value = `${y}-${m}-${day}`;
-          } else {
-              el.value = '';
-          }
-      }
+    // 1. Sincronizar variables de Angular para ambos lados
+    if (field === 'desde') {
+      if (source === 'cfbc') this.wmDesdeDate = this.cfbcDesdeDate;
+      else this.cfbcDesdeDate = this.wmDesdeDate;
     }
-
-    if (field === 'tienda' || field === 'producto') {
-      const val = source === 'cfbc' 
-          ? (field === 'tienda' ? this.cfbcTiendaSelected : this.cfbcProductoSelected) 
-          : (field === 'tienda' ? this.wmTiendaSelected : this.wmProductoSelected);
-          
-      const elId = prefix + (field === 'tienda' ? 'Tienda' : 'Producto');
-      const el = document.getElementById(elId) as HTMLSelectElement;
-      
-      if (el) {
-          // Si la opción no existe en el select oculto, agregarla temporalmente
-          if (!Array.from(el.options).some(opt => opt.value === val)) {
-              el.add(new Option(val, val));
-          }
-          el.value = val;
-      }
+    else if (field === 'hasta') {
+      if (source === 'cfbc') this.wmHastaDate = this.cfbcHastaDate;
+      else this.cfbcHastaDate = this.wmHastaDate;
     }
-
-    if (field === 'estado') {
+    else if (field === 'tienda') {
+      if (source === 'cfbc') this.wmTiendaSelected = this.cfbcTiendaSelected;
+      else this.cfbcTiendaSelected = this.wmTiendaSelected;
+    }
+    else if (field === 'producto') {
+      if (source === 'cfbc') this.wmProductoSelected = this.cfbcProductoSelected;
+      else this.cfbcProductoSelected = this.wmProductoSelected;
+    }
+    else if (field === 'estado') {
       const selected = source === 'cfbc' ? this.cfbcEstadoSelected : this.wmEstadoSelected;
-      const chkPrefix = prefix + '_';
-      
       // Auto-toggle 'ALL' logic for multi-select
+      let finalSel = selected;
       if (selected.length === 0 || (selected.includes('ALL') && selected.length > 1)) {
-          // If they selected something else while ALL was selected, remove ALL
           if (selected.length > 1 && selected[selected.length - 1] !== 'ALL') {
-              const newSel = selected.filter(x => x !== 'ALL');
-              if (source === 'cfbc') this.cfbcEstadoSelected = newSel;
-              if (source === 'wm') this.wmEstadoSelected = newSel;
+              finalSel = selected.filter(x => x !== 'ALL');
           } else {
-              // If they clicked ALL while others were selected, or cleared everything
-              if (source === 'cfbc') this.cfbcEstadoSelected = ['ALL'];
-              if (source === 'wm') this.wmEstadoSelected = ['ALL'];
+              finalSel = ['ALL'];
           }
       }
-
-      const finalSelected = source === 'cfbc' ? this.cfbcEstadoSelected : this.wmEstadoSelected;
-      ['ALL', 'PROCESSING', 'COMPLETED', 'SIN_FOLIO'].forEach(opt => {
-         const chk = document.getElementById(chkPrefix + opt) as HTMLInputElement;
-         if (chk) chk.checked = finalSelected.includes(opt);
-      });
+      this.cfbcEstadoSelected = [...finalSel];
+      this.wmEstadoSelected = [...finalSel];
     }
 
+    // 2. Aplicar los cambios al DOM oculto para AMBOS prefijos
+    ['cfbc', 'wm'].forEach(prefix => {
+      if (field === 'desde' || field === 'hasta') {
+        const val = field === 'desde' 
+            ? (prefix === 'cfbc' ? this.cfbcDesdeDate : this.wmDesdeDate)
+            : (prefix === 'cfbc' ? this.cfbcHastaDate : this.wmHastaDate);
+        
+        const el = document.getElementById(prefix + (field === 'desde' ? 'Desde' : 'Hasta')) as HTMLInputElement;
+        if (el) {
+            if (val) {
+                const d = new Date(val);
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                el.value = `${y}-${m}-${day}`;
+            } else {
+                el.value = '';
+            }
+        }
+      }
+
+      if (field === 'tienda' || field === 'producto') {
+        const val = field === 'tienda'
+            ? (prefix === 'cfbc' ? this.cfbcTiendaSelected : this.wmTiendaSelected)
+            : (prefix === 'cfbc' ? this.cfbcProductoSelected : this.wmProductoSelected);
+            
+        const elId = prefix + (field === 'tienda' ? 'Tienda' : 'Producto');
+        const el = document.getElementById(elId) as HTMLSelectElement;
+        if (el) {
+            if (!Array.from(el.options).some(opt => opt.value === val)) {
+                el.add(new Option(val, val));
+            }
+            el.value = val;
+        }
+      }
+
+      if (field === 'estado') {
+        const finalSelected = prefix === 'cfbc' ? this.cfbcEstadoSelected : this.wmEstadoSelected;
+        const chkPrefix = prefix + '_';
+        ['ALL', 'PROCESSING', 'COMPLETED', 'SIN_FOLIO'].forEach(opt => {
+           const chk = document.getElementById(chkPrefix + opt) as HTMLInputElement;
+           if (chk) chk.checked = finalSelected.includes(opt);
+        });
+      }
+    });
+
+    // 3. Renderizar las tablas nativas
     if (typeof w.renderChoferes === 'function') {
       w.renderChoferes();
     }
