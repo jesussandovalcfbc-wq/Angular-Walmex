@@ -9584,17 +9584,17 @@ window.exportFposSelection = function (event) {
               'BOUQUETS',
               'ASSORTED', // FLOR
               'ROSE',     // Flor Color
-              window.ddmmyyyy4(loadDate, '/'),
+              { t: 'n', v: 25569.0 + ((loadDate.getTime() - (loadDate.getTimezoneOffset() * 60000)) / 86400000), z: 'dd/mm/yyyy' }, // Load Date
               cajas,                            // #cajas
               row.pieces,                       // Pack (Restored as requested)
               -1,                               // Stems (Restored as requested)
-              window.ddmmyyyy4(productionDate, '/'), // Fecha Produccion
+              { t: 'n', v: 25569.0 + ((productionDate.getTime() - (productionDate.getTimezoneOffset() * 60000)) / 86400000), z: 'dd/mm/yyyy' }, // Fecha Produccion
               'H5'                              // Caja
           ]);
     });
     
     window.loadXlsx(function () {
-        var worksheet = XLSX.utils.aoa_to_sheet(output);
+        var worksheet = XLSX.utils.aoa_to_sheet(output, { cellDates: true });
         worksheet['!cols'] = [
             { wch: 25 }, { wch: 34 }, { wch: 34 }, { wch: 27 }, { wch: 14 },
             { wch: 13 }, { wch: 15 }, { wch: 14 }, { wch: 9 }, { wch: 9 },
@@ -9607,7 +9607,7 @@ window.exportFposSelection = function (event) {
         var DAY_NAMES = ['DOMINGO', 'LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'];
         var suffix = (window.fposMode === 'day' && selectedDay !== null) ? '_DIA_' + DAY_NAMES[selectedDay] : '_SEMANA';
         var filenameWeek = row ? row.year + '_' + row.week : 'TODO';
-        XLSX.writeFile(workbook, 'F_POS' + suffix + '_' + filenameWeek + '.xlsx');
+        XLSX.writeFile(workbook, 'F_POS' + suffix + '_' + filenameWeek + '.xlsx', { cellDates: true });
         
         var root = document.getElementById('excelDropdownMenu');
         var submenu = document.getElementById('fposSubmenu');
