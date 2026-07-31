@@ -4,11 +4,14 @@ import { FormsModule } from '@angular/forms';
 import { RouterOutlet } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { forkJoin } from 'rxjs';
+import { CalendarModule } from 'primeng/calendar';
+import { DropdownModule } from 'primeng/dropdown';
+import { MultiSelectModule } from 'primeng/multiselect';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, CommonModule, FormsModule],
+  imports: [RouterOutlet, CommonModule, FormsModule, CalendarModule, DropdownModule, MultiSelectModule],
   templateUrl: './app.component.html',
   encapsulation: ViewEncapsulation.None
 })
@@ -31,9 +34,104 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   private facturasData: any[] = [];
   private devolucionesData: any[] = [];
 
+  // ── Filtros PrimeNG ──────────────
+  cfbcDesdeDate: Date | null = new Date(new Date().getFullYear(), 6, 1); // 01/07
+  cfbcHastaDate: Date | null = null;
+  cfbcTiendaSelected: string = 'ALL';
+  cfbcProductoSelected: string = 'ALL';
+  cfbcEstadoSelected: string[] = ['ALL'];
+
+  wmDesdeDate: Date | null = new Date(new Date().getFullYear(), 6, 1);
+  wmHastaDate: Date | null = null;
+  wmTiendaSelected: string = 'ALL';
+  wmProductoSelected: string = 'ALL';
+  wmEstadoSelected: string[] = ['ALL'];
+
+  tiendaOptions: any[] = [{ label: 'Tienda (Todas)', value: 'ALL' }];
+  productoOptions: any[] = [{ label: 'Producto (Todos)', value: 'ALL' }];
+  estadoOptions: any[] = [
+    { label: 'Todos', value: 'ALL' },
+    { label: 'Procesando', value: 'PROCESSING' },
+    { label: 'Procesados', value: 'COMPLETED' },
+    { label: 'Sin Folio', value: 'SIN_FOLIO' }
+  ];
+
+  private dataCheckInterval: any;
+
   // ── Clones fijos eliminados a favor de CSS nativo ──────────────
 
   constructor(private http: HttpClient) {}
+
+  onFilterChange(source: 'cfbc' | 'wm', field: 'desde' | 'hasta' | 'tienda' | 'producto' | 'estado') {
+    const prefix = source === 'cfbc' ? 'cfbc' : 'wm';
+    const w = window as any;
+
+    if (field === 'desde' || field === 'hasta') {
+      const val = source === 'cfbc' 
+          ? (field === 'desde' ? this.cfbcDesdeDate : this.cfbcHastaDate) 
+          : (field === 'desde' ? this.wmDesdeDate : this.wmHastaDate);
+      
+      const el = document.getElementById(prefix + (field === 'desde' ? 'Desde' : 'Hasta')) as HTMLInputElement;
+      if (el) {
+          if (val) {
+              const d = new Date(val);
+              // Format YYYY-MM-DD local time
+              const y = d.getFullYear();
+              const m = String(d.getMonth() + 1).padStart(2, '0');
+              const day = String(d.getDate()).padStart(2, '0');
+              el.value = `${y}-${m}-${day}`;
+          } else {
+              el.value = '';
+          }
+      }
+    }
+
+    if (field === 'tienda' || field === 'producto') {
+      const val = source === 'cfbc' 
+          ? (field === 'tienda' ? this.cfbcTiendaSelected : this.cfbcProductoSelected) 
+          : (field === 'tienda' ? this.wmTiendaSelected : this.wmProductoSelected);
+          
+      const elId = prefix + (field === 'tienda' ? 'Tienda' : 'Producto');
+      const el = document.getElementById(elId) as HTMLSelectElement;
+      
+      if (el) {
+          // Si la opción no existe en el select oculto, agregarla temporalmente
+          if (!Array.from(el.options).some(opt => opt.value === val)) {
+              el.add(new Option(val, val));
+          }
+          el.value = val;
+      }
+    }
+
+    if (field === 'estado') {
+      const selected = source === 'cfbc' ? this.cfbcEstadoSelected : this.wmEstadoSelected;
+      const chkPrefix = prefix + '_';
+      
+      // Auto-toggle 'ALL' logic for multi-select
+      if (selected.length === 0 || (selected.includes('ALL') && selected.length > 1)) {
+          // If they selected something else while ALL was selected, remove ALL
+          if (selected.length > 1 && selected[selected.length - 1] !== 'ALL') {
+              const newSel = selected.filter(x => x !== 'ALL');
+              if (source === 'cfbc') this.cfbcEstadoSelected = newSel;
+              if (source === 'wm') this.wmEstadoSelected = newSel;
+          } else {
+              // If they clicked ALL while others were selected, or cleared everything
+              if (source === 'cfbc') this.cfbcEstadoSelected = ['ALL'];
+              if (source === 'wm') this.wmEstadoSelected = ['ALL'];
+          }
+      }
+
+      const finalSelected = source === 'cfbc' ? this.cfbcEstadoSelected : this.wmEstadoSelected;
+      ['ALL', 'PROCESSING', 'COMPLETED', 'SIN_FOLIO'].forEach(opt => {
+         const chk = document.getElementById(chkPrefix + opt) as HTMLInputElement;
+         if (chk) chk.checked = finalSelected.includes(opt);
+      });
+    }
+
+    if (typeof w.renderChoferes === 'function') {
+      w.renderChoferes();
+    }
+  }
 
   ngAfterViewInit() {
     const loaderTxt = document.querySelector('.ld-txt');
@@ -76,6 +174,21 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnInit() {
+    this.dataCheckInterval = setInterval(() => {
+      const w = window as any;
+      if (w.DATA && w.DATA.tiendas && w.DATA.productos) {
+        this.tiendaOptions = [
+          { label: 'Tienda (Todas)', value: 'ALL' },
+          ...w.DATA.tiendas.map((t: string) => ({ label: t, value: t }))
+        ];
+        this.productoOptions = [
+          { label: 'Producto (Todos)', value: 'ALL' },
+          ...w.DATA.productos.map((p: string) => ({ label: p, value: p }))
+        ];
+        clearInterval(this.dataCheckInterval);
+      }
+    }, 1000);
+
     (window as any).openInvoiceEditor = (folio: string) => this.openInvoiceEditor(folio);
     (window as any).cancelInvoice = (folio: string) => this.cancelInvoice(folio);
     (window as any).persistDevolucionVerification = (id: number, verified: boolean) =>
@@ -156,15 +269,15 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     };
   }
 
-  onConsolidadoEstadoChange(event: Event, peerSelectId: string) {
-    const select = event.target as HTMLSelectElement;
-    const peerSelect = document.getElementById(peerSelectId) as HTMLSelectElement | null;
-
-    if (peerSelect) peerSelect.value = select.value;
-    if (typeof (window as any).renderChoferes === 'function') {
-      (window as any).renderChoferes();
-    }
-  }
+  // Función obsoleta - ahora se usa updateEstadoFilter en extracted_logic.js
+  // onConsolidadoEstadoChange(event: Event, peerSelectId: string) {
+  //   const select = event.target as HTMLSelectElement;
+  //   const peerSelect = document.getElementById(peerSelectId) as HTMLSelectElement | null;
+  //   if (peerSelect) peerSelect.value = select.value;
+  //   if (typeof (window as any).renderChoferes === 'function') {
+  //     (window as any).renderChoferes();
+  //   }
+  // }
 
   openInvoiceEditor(folio: string) {
     const rows = this.facturasData.filter((row) => String(row.folio ?? '') === String(folio));

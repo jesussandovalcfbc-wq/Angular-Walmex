@@ -223,6 +223,166 @@ window.toggleRowCheck = function(checkbox, key, source) {
     window.saveChecks();
 };
 
+window.selectAllVisible = function(source) {
+    var tableId = source === 'cfbc' ? '#cfbcTable' : '#walmartTable';
+    var rows = document.querySelectorAll(tableId + ' tbody tr:not(.subtotal-row)');
+    var checkSet = source === 'cfbc' ? checkedCFBC : checkedWalmart;
+    
+    rows.forEach(function(row) {
+        var key = row.getAttribute('data-key');
+        if (key) {
+            var checkbox = row.querySelector('input[type="checkbox"]');
+            if (checkbox && !checkbox.checked) {
+                checkbox.checked = true;
+                checkSet.add(key);
+                row.classList.add('checked');
+                var procesandoLbl = row.querySelector('.procesando-lbl');
+                if (procesandoLbl) procesandoLbl.style.display = 'none';
+            }
+        }
+    });
+    
+    window.saveChecks();
+};
+
+window.updateEstadoFilter = function(source, changedId) {
+    console.log('updateEstadoFilter called with source:', source, 'changedId:', changedId);
+    
+    var prefix = source === 'cfbc' ? 'cfbc_' : 'wm_';
+    var btnId = source === 'cfbc' ? 'cfbcEstadoBtn' : 'wmEstadoBtn';
+    var allCheckbox = document.getElementById(prefix + 'ALL');
+    var processingCheckbox = document.getElementById(prefix + 'PROCESSING');
+    var completedCheckbox = document.getElementById(prefix + 'COMPLETED');
+    var sinFolioCheckbox = document.getElementById(prefix + 'SIN_FOLIO');
+    
+    // Check if any specific status is checked
+    var anySpecificChecked = (processingCheckbox && processingCheckbox.checked) || 
+                             (completedCheckbox && completedCheckbox.checked) || 
+                             (sinFolioCheckbox && sinFolioCheckbox.checked);
+
+    if (changedId === 'ALL') {
+        if (allCheckbox && allCheckbox.checked) {
+            // Se marcó "Todos", desmarcar los demás
+            if (processingCheckbox) processingCheckbox.checked = false;
+            if (completedCheckbox) completedCheckbox.checked = false;
+            if (sinFolioCheckbox) sinFolioCheckbox.checked = false;
+        } else {
+            // Si el usuario desmarca Todos y no hay nada más marcado, lo forzamos a Todos o dejamos vacío?
+            // Mejor forzar Todos si no hay nada
+            if (!anySpecificChecked && allCheckbox) allCheckbox.checked = true;
+        }
+    } else if (changedId) {
+        if (anySpecificChecked) {
+            // Se marcó uno específico, desmarcar "Todos"
+            if (allCheckbox) allCheckbox.checked = false;
+        } else {
+            // Si se desmarcó el último específico, marcar "Todos"
+            if (allCheckbox) allCheckbox.checked = true;
+        }
+    } else {
+        // Fallback heredado
+        if (allCheckbox && allCheckbox.checked && !anySpecificChecked) {
+            // ok
+        } else if (anySpecificChecked) {
+            if (allCheckbox) allCheckbox.checked = false;
+        } else {
+            if (allCheckbox) allCheckbox.checked = true;
+        }
+    }
+    
+    // Actualizar el texto del botón
+    var btn = document.getElementById(btnId);
+    if (btn) {
+        var selectedLabels = [];
+        if (allCheckbox && allCheckbox.checked) {
+            selectedLabels.push('Todos');
+        } else {
+            if (processingCheckbox && processingCheckbox.checked) selectedLabels.push('Procesando');
+            if (completedCheckbox && completedCheckbox.checked) selectedLabels.push('Procesados');
+            if (sinFolioCheckbox && sinFolioCheckbox.checked) selectedLabels.push('Sin Folio');
+        }
+        btn.textContent = (selectedLabels.length > 0 ? 'Estado (' + selectedLabels.join(', ') + ')' : 'Estado (Todos)') + ' ▾';
+    }
+    
+    // Re-renderizar
+    console.log('Attempting to call renderChoferes...');
+    if (typeof window.renderChoferes === 'function') {
+        console.log('Calling window.renderChoferes()');
+        window.renderChoferes();
+    } else if (typeof renderChoferes === 'function') {
+        console.log('Calling renderChoferes()');
+        renderChoferes();
+    } else {
+        console.error('renderChoferes function not found!');
+    }
+};
+
+// Inicializar event listeners cuando el DOM esté listo
+function initEstadoFilters() {
+    console.log('Initializing estado filters...');
+    
+    // CFBC
+    ['cfbc_ALL', 'cfbc_PROCESSING', 'cfbc_COMPLETED', 'cfbc_SIN_FOLIO'].forEach(function(id) {
+        var checkbox = document.getElementById(id);
+        if (checkbox) {
+            checkbox.addEventListener('change', function() {
+                console.log('Checkbox changed:', id);
+                window.updateEstadoFilter('cfbc');
+            });
+        }
+    });
+    
+    // Walmart
+    ['wm_ALL', 'wm_PROCESSING', 'wm_COMPLETED', 'wm_SIN_FOLIO'].forEach(function(id) {
+        var checkbox = document.getElementById(id);
+        if (checkbox) {
+            checkbox.addEventListener('change', function() {
+                console.log('Checkbox changed:', id);
+                window.updateEstadoFilter('walmart');
+            });
+        }
+    });
+}
+
+// Ejecutar cuando el DOM esté listo
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initEstadoFilters);
+} else {
+    initEstadoFilters();
+}
+
+window.toggleEstadoDropdown = function(source) {
+    var dropdownId = source === 'cfbc' ? 'cfbcEstadoDropdown' : 'wmEstadoDropdown';
+    var dropdown = document.getElementById(dropdownId);
+    
+    if (dropdown) {
+        if (dropdown.style.display === 'none' || dropdown.style.display === '') {
+            // Cerrar otros dropdowns primero
+            document.querySelectorAll('[id$="EstadoDropdown"]').forEach(function(dd) {
+                if (dd.id !== dropdownId) dd.style.display = 'none';
+            });
+            dropdown.style.display = 'block';
+        } else {
+            dropdown.style.display = 'none';
+        }
+    }
+};
+
+// Cerrar dropdown al hacer click fuera
+document.addEventListener('click', function(event) {
+    // Si el click es en un checkbox o label dentro del dropdown, no cerrar
+    if (event.target.type === 'checkbox' && event.target.id.includes('_')) {
+        return; // Dejar que el onclick del checkbox maneje la lógica
+    }
+    
+    var isClickInside = event.target.closest('.consolidado-estado-filter');
+    if (!isClickInside) {
+        document.querySelectorAll('[id$="EstadoDropdown"]').forEach(function(dropdown) {
+            dropdown.style.display = 'none';
+        });
+    }
+});
+
 window.saveNota = function(key, value, source) {
     var map = source === 'cfbc' ? notesCFBC : notesWalmart;
     if (value.trim()) {
@@ -1130,8 +1290,27 @@ function renderChoferes() {
     var selCfbcProd = document.getElementById('cfbcProducto');
     var selWmTienda = document.getElementById('wmTienda');
     var selWmProd = document.getElementById('wmProducto');
-    var selCfbcEstado = document.getElementById('cfbcEstado');
-    var selWmEstado = document.getElementById('wmEstado');
+    
+    // Obtener estados seleccionados de checkboxes
+    var cfbcEstados = [];
+    if (document.getElementById('cfbc_ALL') && document.getElementById('cfbc_ALL').checked) {
+        cfbcEstados = ['ALL'];
+    } else {
+        if (document.getElementById('cfbc_PROCESSING') && document.getElementById('cfbc_PROCESSING').checked) cfbcEstados.push('PROCESSING');
+        if (document.getElementById('cfbc_COMPLETED') && document.getElementById('cfbc_COMPLETED').checked) cfbcEstados.push('COMPLETED');
+        if (document.getElementById('cfbc_SIN_FOLIO') && document.getElementById('cfbc_SIN_FOLIO').checked) cfbcEstados.push('SIN_FOLIO');
+        if (cfbcEstados.length === 0) cfbcEstados = ['ALL']; // Default
+    }
+    
+    var wmEstados = [];
+    if (document.getElementById('wm_ALL') && document.getElementById('wm_ALL').checked) {
+        wmEstados = ['ALL'];
+    } else {
+        if (document.getElementById('wm_PROCESSING') && document.getElementById('wm_PROCESSING').checked) wmEstados.push('PROCESSING');
+        if (document.getElementById('wm_COMPLETED') && document.getElementById('wm_COMPLETED').checked) wmEstados.push('COMPLETED');
+        if (document.getElementById('wm_SIN_FOLIO') && document.getElementById('wm_SIN_FOLIO').checked) wmEstados.push('SIN_FOLIO');
+        if (wmEstados.length === 0) wmEstados = ['ALL']; // Default
+    }
     
     if (selCfbcTienda && selCfbcTienda.options.length <= 1) {
         DATA.tiendas.forEach(function(t) {
@@ -1148,13 +1327,11 @@ function renderChoferes() {
     var cfbcH = document.getElementById('cfbcHasta') ? document.getElementById('cfbcHasta').value : '';
     var cfbcT = selCfbcTienda ? selCfbcTienda.value : 'ALL';
     var cfbcP = selCfbcProd ? selCfbcProd.value : 'ALL';
-    var cfbcEstado = selCfbcEstado ? selCfbcEstado.value : 'ALL';
 
     var wmD = document.getElementById('wmDesde') ? document.getElementById('wmDesde').value : '';
     var wmH = document.getElementById('wmHasta') ? document.getElementById('wmHasta').value : '';
     var wmT = selWmTienda ? selWmTienda.value : 'ALL';
     var wmP = selWmProd ? selWmProd.value : 'ALL';
-    var wmEstado = selWmEstado ? selWmEstado.value : 'ALL';
     
     var cfbcCount = 0;
     if (DATABASE_DATA && DATABASE_DATA.length > 0) {
@@ -1170,8 +1347,16 @@ function renderChoferes() {
 
             var rowKey = rowFecha + '|' + (row.tienda || '') + '|' + (row.producto || '');
             var rowProcesado = !!(row.url_acuse || row.razon_sin_acuse || checkedCFBC.has(rowKey));
-            if (cfbcEstado === 'PROCESSING' && rowProcesado) return;
-            if (cfbcEstado === 'COMPLETED' && !rowProcesado) return;
+            var rowSinFolio = !!(row.razon_sin_acuse && !row.url_acuse);
+            
+            // Filtrar por estados seleccionados
+            if (!cfbcEstados.includes('ALL')) {
+                var matchesFilter = false;
+                if (cfbcEstados.includes('PROCESSING') && !rowProcesado) matchesFilter = true;
+                if (cfbcEstados.includes('COMPLETED') && rowProcesado) matchesFilter = true;
+                if (cfbcEstados.includes('SIN_FOLIO') && rowSinFolio) matchesFilter = true;
+                if (!matchesFilter) return;
+            }
             
             var rowVenta = parseFloat(row.venta_total || row.venta || 0);
             cfbcRowsArr.push({
@@ -1205,7 +1390,7 @@ function renderChoferes() {
                       var iconsHtml = '<div style="display:inline-flex; align-items:center; float:left; padding-left:10px; gap:8px;">';
                       if (curFactura) iconsHtml += '<img src="'+curFactura+'" onclick="openImageViewer(this.src)" style="height:25px; width:25px; object-fit:cover; border-radius:4px; cursor:pointer; border:1px solid #ccc; box-shadow:0 2px 4px rgba(0,0,0,0.1);" title="Ver Factura">';
                       if (curAcuse) iconsHtml += '<img src="'+curAcuse+'" onclick="openImageViewer(this.src)" style="height:25px; width:25px; object-fit:cover; border-radius:4px; cursor:pointer; border:1px solid #ccc; box-shadow:0 2px 4px rgba(0,0,0,0.1);" title="Ver Acuse">';
-                      if (curRazon) iconsHtml += '<span style="color:#d97706; font-size:12px; cursor:help; vertical-align:middle; display:flex; align-items:center; gap:4px;" title="Sin Folio: '+curRazon+'">⚠️ Sin Folio</span>';
+                      if (curRazon && !curAcuse) iconsHtml += '<span style="color:#d97706; font-size:12px; cursor:help; vertical-align:middle; display:flex; align-items:center; gap:4px;" title="Sin Folio: '+curRazon+'">⚠️ Sin Folio</span>';
                       iconsHtml += '</div>';
 
                       var actionsHtml = '';
@@ -1305,8 +1490,16 @@ function renderChoferes() {
                         if (emb > 0) {
                             var wmRowKey = fecha + '|' + tienda + '|' + prod;
                             var wmRowProcesado = checkedWalmart.has(wmRowKey);
-                            if (wmEstado === 'PROCESSING' && wmRowProcesado) return;
-                            if (wmEstado === 'COMPLETED' && !wmRowProcesado) return;
+                            
+                            // Filtrar por estados seleccionados
+                            if (!wmEstados.includes('ALL')) {
+                                var matchesFilter = false;
+                                if (wmEstados.includes('PROCESSING') && !wmRowProcesado) matchesFilter = true;
+                                if (wmEstados.includes('COMPLETED') && wmRowProcesado) matchesFilter = true;
+                                // SIN_FOLIO no aplica para Walmart (no tiene url_acuse ni razon_sin_acuse)
+                                if (!matchesFilter) return;
+                            }
+                            
                             var vCfbc = parseFloat(metricas.venta_cfbc || 0);
                             wmRows.push({
                                 key: wmRowKey,
@@ -1381,6 +1574,9 @@ function renderChoferes() {
     var elmWV = document.getElementById('walmartVenta');
     if(elmWV) elmWV.innerText = '$' + wmV.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
+
+// Exponer renderChoferes al scope global
+window.renderChoferes = renderChoferes;
 
 function setView(v){
   var ctrlCont = document.getElementById('globalCtrlContainer');
