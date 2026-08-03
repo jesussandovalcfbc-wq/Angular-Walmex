@@ -52,6 +52,52 @@ export const pool = new Pool({
   ssl: secureConnectionString.includes('sslmode=') ? undefined : { rejectUnauthorized: true }
 });
 
+let programadoVisibilitySchema: Promise<void> | null = null;
+
+async function ensureProgramadoVisibilitySchema(): Promise<void> {
+  if (!programadoVisibilitySchema) {
+    programadoVisibilitySchema = pool.query(`
+      CREATE TABLE IF NOT EXISTS walmex_programado_config (
+        id TEXT PRIMARY KEY,
+        hidden_weeks JSONB NOT NULL DEFAULT '[]'::jsonb,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      INSERT INTO walmex_programado_config (id)
+      VALUES ('global')
+      ON CONFLICT (id) DO NOTHING;
+    `).then(() => undefined).catch((error) => {
+      programadoVisibilitySchema = null;
+      throw error;
+    });
+  }
+  await programadoVisibilitySchema;
+}
+
+export async function getProgramadoVisibility(): Promise<string[]> {
+  await ensureProgramadoVisibilitySchema();
+  const result = await pool.query(
+    `SELECT hidden_weeks FROM walmex_programado_config WHERE id = 'global'`
+  );
+  const value = result.rows[0]?.hidden_weeks;
+  return Array.isArray(value) ? value.map(String) : [];
+}
+
+export async function setProgramadoVisibility(hiddenWeeks: string[]): Promise<string[]> {
+  await ensureProgramadoVisibilitySchema();
+  const normalized = Array.from(new Set((hiddenWeeks || [])
+    .map((week) => String(week).trim())
+    .filter((week) => /^\d+$/.test(week))));
+  const result = await pool.query(
+    `UPDATE walmex_programado_config
+        SET hidden_weeks = $1::jsonb, updated_at = NOW()
+      WHERE id = 'global'
+      RETURNING hidden_weeks`,
+    [JSON.stringify(normalized)]
+  );
+  const value = result.rows[0]?.hidden_weeks;
+  return Array.isArray(value) ? value.map(String) : normalized;
+}
+
 function allowedTable(table: string): Set<string> {
   const columns = TABLE_COLUMNS[table];
   if (!columns) throw new Error('Tabla no permitida.');

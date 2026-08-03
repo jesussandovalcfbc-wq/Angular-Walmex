@@ -14,7 +14,9 @@ import {
   cancelInvoice,
   setDevolucionVerification,
   setDevolucionesVerification,
-  verifyDatabase
+  verifyDatabase,
+  getProgramadoVisibility,
+  setProgramadoVisibility
 } from './database';
 import { cargarDatos, cargarGasolina, cargarNomina, invalidateDashboardCache } from './data_processing';
 import { uploadExcelToSharepoint } from './sharepoint';
@@ -57,6 +59,23 @@ app.get('/api/db-health', async (_req, res) => {
     res.status(200).json({ status: 'ok', database: 'neon' });
   } catch (error: any) {
     res.status(503).json({ status: 'error', error: error.message });
+  }
+});
+
+app.get('/api/programado-visibility', async (_req, res) => {
+  try {
+    res.json({ hiddenWeeks: await getProgramadoVisibility() });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/programado-visibility', async (req, res) => {
+  try {
+    const hiddenWeeks = Array.isArray(req.body?.hiddenWeeks) ? req.body.hiddenWeeks : [];
+    res.json({ hiddenWeeks: await setProgramadoVisibility(hiddenWeeks) });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });
 

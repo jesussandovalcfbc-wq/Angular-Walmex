@@ -686,11 +686,13 @@ function init(){
   /* Se dispara en paralelo (no bloquea el resto de init); cuando llegue la
      respuesta de Neon, si el usuario ya está en Resumen, se re-renderiza. */
   _loadPersistedCapture();
+  _loadProgramadoVisibility();
   /* Refresco periódico de la captura compartida mientras se está en Resumen,
      para que los cambios guardados por otras personas aparezcan sin recargar. */
   setInterval(function () {
     if (typeof state !== 'undefined' && state.view === 'resumen') {
       _loadPersistedCapture();
+      _loadProgramadoVisibility();
     }
   }, 30000);
   window.onerror = function(m,s,l){
@@ -3314,6 +3316,25 @@ function getResumenMetricDefs(){
 }
 
 /* ── Helper: obtener filas programado guardadas para un (prod, tienda) ── */
+/* Totales de Programado para el bloque superior de Total general. */
+function _getProgramadoTotalsForPivot(pivot) {
+  var totals = {};
+  if(!pivot || !pivot.rowsData) return totals;
+  Object.keys(pivot.rowsData).forEach(function(r1Key){
+    var subRows = pivot.rowsData[r1Key].subRows || {};
+    Object.keys(subRows).forEach(function(r2Key){
+      _getSavedProgramadoRows(r1Key, r2Key).forEach(function(row){
+        var sem = String(row.sem || '').trim() || 'Sin semana';
+        if(!totals[sem]) totals[sem] = [];
+        (row.values || []).forEach(function(value, index){
+          totals[sem][index] = (totals[sem][index] || 0) + (parseFloat(value) || 0);
+        });
+      });
+    });
+  });
+  return totals;
+}
+
 function _getSavedProgramadoRows(r1Key, r2Key) {
   if(!window._captureProjections) return [];
   var modeKey = _captureProjModeKey();
@@ -3327,7 +3348,7 @@ function _getSavedProgramadoRows(r1Key, r2Key) {
   if(!entry || !entry.rows || !entry.rows.length) return [];
   /* Filtrar solo filas con datos y que estén marcadas como guardadas */
   return entry.rows.filter(function(r){
-    return r.saved && (r.sem || (r.values||[]).some(function(v){ return v !== '' && parseFloat(v) > 0; }));
+    return r.saved && _isProgramadoWeekVisible(r.sem) && (r.sem || (r.values||[]).some(function(v){ return v !== '' && parseFloat(v) > 0; }));
   }).sort(function(a, b){
     var semA = parseInt(String(a.sem).trim(), 10) || 0;
     var semB = parseInt(String(b.sem).trim(), 10) || 0;
@@ -3559,11 +3580,14 @@ function _loadPersistedCapture() {
         var hasVals = (r.valores || []).some(function(v) {
           return v !== '' && parseFloat(v) > 0;
         });
+        /* Las filas sin cantidades son borradores antiguos. No deben volver
+           a aparecer como Capture SEM para otros usuarios al cargar Neon. */
+        if(!hasVals) return;
         store[r.mode][sk].rows.push({
           sem: r.semana,
           values: r.valores,
           hidden: false,
-          saved: hasVals
+          saved: true
         });
       });
       window._captureProjections = store;
@@ -4001,6 +4025,45 @@ function saveAllCaptureRows() {
   alert('No hay capturas con datos para guardar.');
 }
 
+/* ── Editor inline para Programado (Angular no soporta prompt()) ── */
+function _showProgramadoEditDialog(currentValue, onSave) {
+  var old = document.getElementById('_programadoEditModal');
+  if (old) old.remove();
+
+  var modal = document.createElement('div');
+  modal.id = '_programadoEditModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.35);z-index:100000;display:flex;align-items:center;justify-content:center;font-family:"Segoe UI",sans-serif;';
+  modal.innerHTML =
+    '<div role="dialog" aria-modal="true" style="width:300px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 12px 35px rgba(15,23,42,.25);padding:16px">' +
+      '<div style="font-size:14px;font-weight:700;color:#173b60;margin-bottom:10px">Editar Programado</div>' +
+      '<label style="display:block;font-size:12px;color:#475569;margin-bottom:5px" for="_programadoEditInput">Valor</label>' +
+      '<input id="_programadoEditInput" type="number" min="0" step="1" style="box-sizing:border-box;width:100%;padding:7px 8px;border:1px solid #94a3b8;border-radius:4px;font-size:14px" />' +
+      '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">' +
+        '<button type="button" id="_programadoEditCancel" style="padding:6px 12px;border:1px solid #cbd5e1;border-radius:4px;background:#fff;color:#475569;cursor:pointer">Cancelar</button>' +
+        '<button type="button" id="_programadoEditSave" style="padding:6px 12px;border:1px solid #2563eb;border-radius:4px;background:#2563eb;color:#fff;cursor:pointer">Guardar</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(modal);
+
+  var input = document.getElementById('_programadoEditInput');
+  var close = function(){ modal.remove(); };
+  input.value = currentValue === '' ? '' : String(currentValue);
+  document.getElementById('_programadoEditCancel').onclick = close;
+  modal.onclick = function(e){ if(e.target === modal) close(); };
+  document.getElementById('_programadoEditSave').onclick = function(){
+    var raw = String(input.value || '').trim();
+    var parsed = raw === '' ? 0 : Number(raw.replace(/,/g, ''));
+    if(!Number.isFinite(parsed) || parsed < 0){
+      input.focus();
+      return;
+    }
+    close();
+    onSave(Math.round(parsed));
+  };
+  input.focus();
+  input.select();
+}
+
 /* ── Helper: editar programado (cambia todos los valores de una fila) ── */
 function _editProgramadoRow(r1Key, r2Key, rowIdx, colIdx, modeKey, semVal) {
   var store = window._captureProjections && window._captureProjections[modeKey];
@@ -4028,18 +4091,22 @@ function _editProgramadoRow(r1Key, r2Key, rowIdx, colIdx, modeKey, semVal) {
     row = savedRows[rowIdx];
   }
   if(!row) return;
-  var nCols = row.values.length;
+  /* La tabla siempre muestra los 7 días. Algunas filas antiguas tienen
+     valores solo hasta viernes porque los últimos días estaban vacíos; en
+     ese caso los lápices de sábado/domingo deben seguir siendo editables. */
+  var nCols = Math.max(row.values.length, 7);
+  while(row.values.length < nCols) row.values.push('');
   if(colIdx >= 0 && colIdx < nCols){
     var curVal = parseFloat(row.values[colIdx] || '0');
-    var newVal = prompt('Editar Programado - Valor:', curVal || '');
-    if(newVal === null) return;
-    row.values[colIdx] = String(Math.round(parseFloat(String(newVal).replace(/,/g,'')) || 0));
+    _showProgramadoEditDialog(curVal || '', function(newVal){
+      row.values[colIdx] = String(newVal);
+      try { localStorage.setItem(_CAPTURE_LS_KEY, JSON.stringify(window._captureProjections)); } catch(e) {}
+      _saveRowToNeon(modeKey, prod, tienda, row.sem, row.values);
+      if(typeof renderResumen === 'function') renderResumen();
+    });
   } else {
     return;
   }
-  try { localStorage.setItem(_CAPTURE_LS_KEY, JSON.stringify(window._captureProjections)); } catch(e) {}
-  _saveRowToNeon(modeKey, prod, tienda, row.sem, row.values);
-  if(typeof renderResumen === 'function') renderResumen();
 }
 
 /* ── Helper: eliminar una fila programado ── */
@@ -4082,6 +4149,46 @@ function _captureProjStoreKey(prod, tienda) {
 function _captureProjModeKey() {
   return state.resumenMode === 'semanas' ? 'sem' : 'norm';
 }
+
+var _PROGRAMADO_HIDDEN_WEEKS_KEY = 'walmex_programado_hidden_weeks_v1';
+var _PROGRAMADO_VISIBILITY_API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:8000/api/programado-visibility' : '/api/programado-visibility';
+function _loadProgramadoVisibility() {
+  return fetch(_PROGRAMADO_VISIBILITY_API).then(function(resp){ if(!resp.ok) throw new Error('No se pudo cargar la visibilidad global'); return resp.json(); }).then(function(data){
+    var weeks = Array.isArray(data.hiddenWeeks) ? data.hiddenWeeks.map(String) : [];
+    try { localStorage.setItem(_PROGRAMADO_HIDDEN_WEEKS_KEY, JSON.stringify(weeks)); } catch(e) {}
+    if(typeof state !== 'undefined' && state.view === 'resumen' && typeof renderResumen === 'function') renderResumen();
+    return weeks;
+  }).catch(function(error){ console.warn('No se pudo cargar la visibilidad global de Programados:', error); return _getHiddenProgramadoWeeks(); });
+}
+function _getHiddenProgramadoWeeks() {
+  try { var raw = localStorage.getItem(_PROGRAMADO_HIDDEN_WEEKS_KEY); var parsed = raw ? JSON.parse(raw) : []; return Array.isArray(parsed) ? parsed.map(function(w){ return String(w); }) : []; } catch(e) { return []; }
+}
+function _isProgramadoWeekVisible(sem) { return _getHiddenProgramadoWeeks().indexOf(String(sem || '').trim()) === -1; }
+function _getProgramadoWeekList() {
+  var weeks = {}, projections = window._captureProjections || {};
+  ['sem','norm'].forEach(function(modeKey){ Object.keys(projections[modeKey] || {}).forEach(function(sk){ ((projections[modeKey][sk] && projections[modeKey][sk].rows) || []).forEach(function(row){ if(row && row.saved && String(row.sem || '').trim()) weeks[String(row.sem).trim()] = true; }); }); });
+  return Object.keys(weeks).sort(function(a,b){ return (parseInt(a,10)||0) - (parseInt(b,10)||0); });
+}
+window.refreshProgramadoVisibilityMenu = function() {
+  var menu = document.getElementById('programadoVisibilityMenu'); if(!menu) return;
+  var weeks = _getProgramadoWeekList(), hidden = _getHiddenProgramadoWeeks();
+  var html = '<div style="font-size:11px;font-weight:700;color:#7c4a03;padding:3px 5px 7px;border-bottom:1px solid #f1e3a3;margin-bottom:4px">Mostrar semanas programadas</div>';
+  if(!weeks.length) html += '<div style="font-size:11px;color:#64748b;padding:5px">No hay semanas programadas</div>';
+  weeks.forEach(function(sem){ html += '<label style="display:flex;align-items:center;gap:7px;padding:5px;font-size:12px;color:#334155;cursor:pointer"><input type="checkbox" '+(hidden.indexOf(sem) === -1 ? 'checked' : '')+' onchange="window.toggleProgramadoWeek(\''+sem+'\')" style="accent-color:#d97706"><span>Semana '+sem+'</span></label>'; });
+  menu.innerHTML = html;
+};
+window.toggleProgramadoVisibilityMenu = function(event) { if(event) event.stopPropagation(); var menu = document.getElementById('programadoVisibilityMenu'); if(!menu) return; window.refreshProgramadoVisibilityMenu(); menu.style.display = menu.style.display === 'block' ? 'none' : 'block'; };
+window.toggleProgramadoWeek = function(sem) {
+  var week = String(sem || '').trim(), hidden = _getHiddenProgramadoWeeks(), idx = hidden.indexOf(week);
+  if(idx >= 0) hidden.splice(idx, 1); else hidden.push(week);
+  try { localStorage.setItem(_PROGRAMADO_HIDDEN_WEEKS_KEY, JSON.stringify(hidden)); } catch(e) {}
+  if(typeof renderResumen === 'function') renderResumen();
+  fetch(_PROGRAMADO_VISIBILITY_API, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({hiddenWeeks:hidden})})
+    .then(function(resp){ if(!resp.ok) throw new Error('No se pudo guardar la visibilidad global'); return resp.json(); })
+    .then(function(data){ try { localStorage.setItem(_PROGRAMADO_HIDDEN_WEEKS_KEY, JSON.stringify(data.hiddenWeeks || [])); } catch(e) {} })
+    .catch(function(error){ console.warn('No se pudo guardar la visibilidad global de Programados:', error); });
+};
+document.addEventListener('click', function(event){ var c = document.getElementById('programadoVisibilityContainer'), m = document.getElementById('programadoVisibilityMenu'); if(c && m && !c.contains(event.target)) m.style.display = 'none'; });
 
 /* Las semanas abiertas son globales para la sesión, pero los valores siguen
    guardándose por producto+tienda. Así una semana aparece al navegar sin
@@ -6102,6 +6209,7 @@ document.addEventListener('mousemove', function(event){
 function renderResumen(){
   /* Evita conservar explicaciones de una vista o filtro anterior. */
   renderProgramacionIaReasonPanel([]);
+  if(typeof window.refreshProgramadoVisibilityMenu === 'function') window.refreshProgramadoVisibilityMenu();
   if(window._skipCaptureSaveOnce) {
     window._skipCaptureSaveOnce = false;
   } else {
@@ -6279,6 +6387,8 @@ function renderResumen(){
       dayGroups = [{dow:null, label:'SEM', items:weekCols.map(function(col){ return {week:col.rawWeek, weekLabel:col.label, key:col.key}; })}];
     }
     window._captureDayGroups = dayGroups;
+    var programadoTotalsSem = _getProgramadoTotalsForPivot(pivot);
+    var programadoSemKeys = Object.keys(programadoTotalsSem).sort(function(a,b){ return (parseInt(a,10)||0) - (parseInt(b,10)||0); });
 
     var headSemanal =
       '<tr class="bg-[#eef2f6] text-slate-800 border-slate-300 text-[14px] border-b border-slate-700">' +
@@ -7083,7 +7193,7 @@ function _getDateKeyFromSemDay(sem, dayStr) {
       var totalRow = '<tr class="pivot-total" style="background:#1a3a5c;color:#fff">';
       if(di === 0 && wi === 0){
         totalRow +=
-          '<td colspan="2" rowspan="'+(defsAll.length * semsResumen.length)+'" style="font-size:16px;vertical-align:middle;padding:5px 8px;font-weight:bold;border-right:1px solid #3a5a8c">'+
+          '<td colspan="2" rowspan="'+(defsAll.length * semsResumen.length + programadoSemKeys.length)+'" style="font-size:16px;vertical-align:middle;padding:5px 8px;font-weight:bold;border-right:1px solid #3a5a8c">'+
           'Total general</td>';
       }
       totalRow += '<td style="position:static;background:#1a3a5c;padding:3px 8px;font-size:15px;font-weight:normal;color:#000;">'+(wi === 0 ? def.label : '')+'<div style="font-size:15px;color:#000;font-weight:bold;margin-top:2px">'+resumenSemLabel(semActual)+'</div></td>';
@@ -7115,6 +7225,18 @@ function _getDateKeyFromSemDay(sem, dayStr) {
       totalRow += '</tr>';
       totalRowsGroup.push(totalRow);
       });
+    });
+
+    programadoSemKeys.forEach(function(semKey, programadoIndex){
+      var programadoRow = '<tr class="pivot-total" style="background:#fff4c7;color:#000">';
+      programadoRow += '<td style="position:static;background:#fff4c7;padding:3px 8px;font-size:15px;font-weight:normal;color:#7c4a03">Sum of Programado<div style="font-size:15px;font-weight:bold;margin-top:2px">'+semKey+'</div></td>';
+      dayGroups.forEach(function(group, gi){
+        var value = programadoTotalsSem[semKey][gi] || 0;
+        programadoRow += '<td style="font-size:14px;position:static;background:#fff4c7;color:#7c4a03;text-align:right;width:68px;min-width:68px;max-width:68px;padding:3px 8px;vertical-align:middle">'+(value ? fmt(value) : '')+'</td>';
+      });
+      var programadoGrand = programadoTotalsSem[semKey].reduce(function(sum, value){ return sum + (parseFloat(value) || 0); }, 0);
+      programadoRow += '<td style="font-size:14px;position:static;background:#fff4c7;color:#7c4a03;text-align:right;width:82px;min-width:82px;padding:3px 8px;font-weight:bold;border-left:2px solid #e2c96d;border-right:1px solid #e2c96d">'+fmt(programadoGrand)+'</td></tr>';
+      totalRowsGroup.push(programadoRow);
     });
 
     if (window._totalTop !== false) {
@@ -7660,11 +7782,13 @@ function _getDateKeyFromSemDay(sem, dayStr) {
 
   /* ── GRAND TOTAL ROWS (one per metric) ───────────────────────────── */
   var totalRowsGroupNorm = [];
+  var programadoTotalsNorm = _getProgramadoTotalsForPivot(pivot);
+  var programadoSemKeysNorm = Object.keys(programadoTotalsNorm).sort(function(a,b){ return (parseInt(a,10)||0) - (parseInt(b,10)||0); });
   defsAll.forEach(function(def, di){
     var rowHTML = '<tr class="pivot-total bg-slate-200 text-slate-900 font-bold border-t border-slate-300">';
     if(di === 0){
       rowHTML +=
-        '<td colspan="2" rowspan="'+defsAll.length+'" '+
+        '<td colspan="2" rowspan="'+(defsAll.length + programadoSemKeysNorm.length)+'" '+
         'style="font-size:16px;vertical-align:middle;padding:5px 8px;font-weight:bold;border-right:1px solid #3a5a8c">'+
         'Total general</td>';
     }
@@ -7696,6 +7820,18 @@ function _getDateKeyFromSemDay(sem, dayStr) {
     rowHTML += '<td style="font-size:14px;position:static;background:'+cellBg+';color:'+cellColor+';text-align:right;padding:3px 8px;font-weight:bold;border-left:2px solid #4a6a9c">'+gt+'</td>';
     rowHTML += '</tr>';
     totalRowsGroupNorm.push(rowHTML);
+  });
+
+  programadoSemKeysNorm.forEach(function(semKey){
+    var programadoRowNorm = '<tr class="pivot-total bg-amber-100 text-amber-900 font-bold border-t border-amber-300">';
+    programadoRowNorm += '<td class="px-3 py-2 border-r border-amber-300 font-bold text-[13px] bg-amber-100">Sum of Programado<div style="font-size:12px;margin-top:2px">'+semKey+'</div></td>';
+    pivot.columns.forEach(function(col, ci){
+      var value = programadoTotalsNorm[semKey][ci] || 0;
+      programadoRowNorm += '<td class="text-[13px] text-right px-2 py-2 border-r border-amber-300 bg-amber-100">'+(value ? fmt(value) : '')+'</td>';
+    });
+    var programadoGrandNorm = programadoTotalsNorm[semKey].reduce(function(sum, value){ return sum + (parseFloat(value) || 0); }, 0);
+    programadoRowNorm += '<td class="text-[13px] text-right px-2 py-2 bg-amber-100 border-l-2 border-amber-400">'+fmt(programadoGrandNorm)+'</td></tr>';
+    totalRowsGroupNorm.push(programadoRowNorm);
   });
 
   if (window._totalTop !== false) {
