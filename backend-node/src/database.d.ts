@@ -1,5 +1,7 @@
 import { Pool } from 'pg';
 export declare const pool: Pool;
+export declare function getProgramadoVisibility(): Promise<string[]>;
+export declare function setProgramadoVisibility(hiddenWeeks: string[]): Promise<string[]>;
 export declare function getFacturasData(): Promise<any[]>;
 export declare function getDevolucionesData(): Promise<any[]>;
 export declare function setDevolucionVerification(id: number, verified: boolean): Promise<any>;

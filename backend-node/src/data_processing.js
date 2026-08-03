@@ -53,7 +53,7 @@ function invalidateDashboardCache() {
     }
 }
 const VEHICULOS_GASOLINA = ['FORD / TRANSIT 250 / 2020', 'FORD / TRANSIT / 2019'];
-const GASOLINA_SHARED_LINK = "https://pacificafarms-my.sharepoint.com/:x:/g/personal/anahi_mora_cfbc_co/IQANE_rjNbe-T5n5XZuwt3FwAa9dla1RGnbl1oC9PGuNO-o?e=4GdxJi";
+const GASOLINA_SHARED_LINK = "https://pacificafarms-my.sharepoint.com/:x:/g/personal/anahi_mora_cfbc_co/IQANE_rjNbe-T5n5XZuwt3FwAa9dla1RGnbl1oC9PGuNO-o?e=X5eMOc";
 const NOMINA_SHARED_LINK = "https://pacificafarms-my.sharepoint.com/:x:/g/personal/anahi_mora_cfbc_co/IQAQCb79SzHtRrTQR71pSNQcAT7r1BbxaVtGuiSy1lUzZOY?e=hxAq81&download=1";
 function parseExcelDate(v) {
     if (v instanceof Date)
@@ -625,10 +625,10 @@ async function cargarDatos(cacheKey = "") {
             detalleInventario.data = detData;
         }
         // --- Extracción para Cuarto Frío ---
-        const idxTiendaCF = detHeaders.indexOf('tienda_1');
-        const idxFechaCF = detHeaders.indexOf('fecha_1');
-        const idxProductoCF = detHeaders.indexOf('producto_1');
-        const idxExistenciaCF = detHeaders.indexOf('existencia');
+        const idxTiendaCF = 10; // K
+        const idxFechaCF = 11; // L
+        const idxProductoCF = 13; // N
+        const idxExistenciaCF = 14; // O
         if (idxTiendaCF >= 0 && idxFechaCF >= 0 && idxProductoCF >= 0 && idxExistenciaCF >= 0) {
             const cfData = {};
             const cfFechasSet = new Set();
@@ -749,7 +749,6 @@ async function cargarDatos(cacheKey = "") {
         const appRows = XLSX.utils.sheet_to_json(wsReporteGastosApp, { header: 1 });
         const normalizar = (value) => String(value || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
         const parseFechaGastoApp = (value) => {
-            // Las fechas numéricas ahora vienen en formato normal en Excel
             if (typeof value === 'number') {
                 const excelDate = new Date(Math.round((value - 25569) * 86400 * 1000));
                 if (isNaN(excelDate.getTime()))
@@ -757,10 +756,11 @@ async function cargarDatos(cacheKey = "") {
                 const day = excelDate.getUTCDate();
                 const month = excelDate.getUTCMonth() + 1;
                 const year = excelDate.getUTCFullYear();
-                const corrected = new Date(year, month - 1, day);
-                if (corrected.getFullYear() === year && corrected.getMonth() === month - 1 && corrected.getDate() === day)
-                    return corrected;
-                return null;
+                // IMPORTANTE: SharePoint / PowerAutomate invierte el mes y el día (formato US MM/DD/YYYY)
+                // para todos los días <= 12 (ej. 10/7/2026 lo toma como Oct 7).
+                // Intercambiamos el mes y el día para restaurar la fecha correcta (DD/MM/YYYY).
+                const corrected = new Date(year, day - 1, month);
+                return corrected;
             }
             if (typeof value === 'string') {
                 const match = value.trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);

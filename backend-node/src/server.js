@@ -46,6 +46,23 @@ app.get('/api/db-health', async (_req, res) => {
         res.status(503).json({ status: 'error', error: error.message });
     }
 });
+app.get('/api/programado-visibility', async (_req, res) => {
+    try {
+        res.json({ hiddenWeeks: await (0, database_1.getProgramadoVisibility)() });
+    }
+    catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+app.put('/api/programado-visibility', async (req, res) => {
+    try {
+        const hiddenWeeks = Array.isArray(req.body?.hiddenWeeks) ? req.body.hiddenWeeks : [];
+        res.json({ hiddenWeeks: await (0, database_1.setProgramadoVisibility)(hiddenWeeks) });
+    }
+    catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 app.get('/api/dashboard-data', (req, res) => {
     if (!GLOBAL_DATA) {
         return res.status(503).json({ error: 'Data is still loading. Please try again later.' });

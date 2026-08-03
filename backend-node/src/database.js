@@ -4,6 +4,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.pool = void 0;
+exports.getProgramadoVisibility = getProgramadoVisibility;
+exports.setProgramadoVisibility = setProgramadoVisibility;
 exports.getFacturasData = getFacturasData;
 exports.getDevolucionesData = getDevolucionesData;
 exports.setDevolucionVerification = setDevolucionVerification;
@@ -63,6 +65,43 @@ exports.pool = new pg_1.Pool({
     connectionTimeoutMillis: 15_000,
     ssl: secureConnectionString.includes('sslmode=') ? undefined : { rejectUnauthorized: true }
 });
+let programadoVisibilitySchema = null;
+async function ensureProgramadoVisibilitySchema() {
+    if (!programadoVisibilitySchema) {
+        programadoVisibilitySchema = exports.pool.query(`
+      CREATE TABLE IF NOT EXISTS walmex_programado_config (
+        id TEXT PRIMARY KEY,
+        hidden_weeks JSONB NOT NULL DEFAULT '[]'::jsonb,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      INSERT INTO walmex_programado_config (id)
+      VALUES ('global')
+      ON CONFLICT (id) DO NOTHING;
+    `).then(() => undefined).catch((error) => {
+            programadoVisibilitySchema = null;
+            throw error;
+        });
+    }
+    await programadoVisibilitySchema;
+}
+async function getProgramadoVisibility() {
+    await ensureProgramadoVisibilitySchema();
+    const result = await exports.pool.query(`SELECT hidden_weeks FROM walmex_programado_config WHERE id = 'global'`);
+    const value = result.rows[0]?.hidden_weeks;
+    return Array.isArray(value) ? value.map(String) : [];
+}
+async function setProgramadoVisibility(hiddenWeeks) {
+    await ensureProgramadoVisibilitySchema();
+    const normalized = Array.from(new Set((hiddenWeeks || [])
+        .map((week) => String(week).trim())
+        .filter((week) => /^\d+$/.test(week))));
+    const result = await exports.pool.query(`UPDATE walmex_programado_config
+        SET hidden_weeks = $1::jsonb, updated_at = NOW()
+      WHERE id = 'global'
+      RETURNING hidden_weeks`, [JSON.stringify(normalized)]);
+    const value = result.rows[0]?.hidden_weeks;
+    return Array.isArray(value) ? value.map(String) : normalized;
+}
 function allowedTable(table) {
     const columns = TABLE_COLUMNS[table];
     if (!columns)
