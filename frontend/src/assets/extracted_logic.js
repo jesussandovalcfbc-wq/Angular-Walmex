@@ -4891,7 +4891,7 @@ function _resumenAnalysisProgramadoSource(weeks, tiendas, productos){
     productos.forEach(function(product){
       var entry = captureStore[_captureProjStoreKey(product, store)];
       ((entry && entry.rows) || []).forEach(function(row){
-        if(!row || !row.saved) return;
+        if(!row || !row.saved || !_isProgramadoWeekVisible(row.sem)) return;
         var weekKey = weekByNumber[_resumenAnalysisWeekParts(row.sem).week];
         if(!weekKey) return;
         (row.values || []).forEach(function(rawValue,index){
@@ -4911,7 +4911,7 @@ function _resumenAnalysisProgramadoSource(weeks, tiendas, productos){
 }
 
 function _resumenAnalysisProgramadoWeeks(baseWeeks, tiendas, productos){
-  baseWeeks = Array.isArray(baseWeeks) ? baseWeeks.map(function(week){ return String(week); }) : [];
+  baseWeeks = Array.isArray(baseWeeks) ? baseWeeks.map(function(week){ return String(week); }).filter(_isProgramadoWeekVisible) : [];
   if(!baseWeeks.length) return [];
 
   var orderedBase = baseWeeks.slice().sort(function(a,b){
@@ -4941,7 +4941,7 @@ function _resumenAnalysisProgramadoWeeks(baseWeeks, tiendas, productos){
     productos.forEach(function(product){
       var entry = captureStore[_captureProjStoreKey(product, store)];
       ((entry && entry.rows) || []).forEach(function(row){
-        if(!row || !row.saved) return;
+        if(!row || !row.saved || !_isProgramadoWeekVisible(row.sem)) return;
         var parts = _resumenAnalysisWeekParts(row.sem);
         var serial = (parts.year * 100) + parts.week;
         if(!parts.week || serial < startSerial) return;
@@ -4959,7 +4959,8 @@ function _resumenAnalysisMetricValue(record, metricKey){
 
 function _collectResumenPosAnalysis(metricKey, overrideWeeks){
   metricKey = metricKey === 'programado' || metricKey === 'embarque' ? metricKey : 'ventas';
-  var weeks = (Array.isArray(overrideWeeks) && overrideWeeks.length ? overrideWeeks : getSemanasActivas()).map(function(s){ return String(s); }).sort(function(a,b){
+  var analysisSourceWeeks = Array.isArray(overrideWeeks) ? overrideWeeks : getSemanasActivas();
+  var weeks = analysisSourceWeeks.map(function(s){ return String(s); }).sort(function(a,b){
     return (parseInt(a,10)||0) - (parseInt(b,10)||0);
   });
   var tiendas = getTiendasActivas();
@@ -5680,6 +5681,7 @@ function renderResumenAnalysis(){
       ]);
     var columnCount = headers.length;
     var gridWidth = Math.max(760, 610 + (weeks.length * 72) + (differenceHeaders.length * 90) + ((hierarchyHeaders.length - 1) * 105));
+    var programadoTableClass = analysis.metricKey === 'programado' ? ' analysis-programado-table' : '';
     var headerHtml = headers.map(function(header){
       return '<th class="analysis-field-header" data-field="'+header.field+'" '+
         'onmousedown="resumenPivotDragStart(event)" '+
@@ -5689,19 +5691,22 @@ function renderResumenAnalysis(){
     }).join('');
     function treeMetricCells(metricRow){
       var pctText = metricRow.pct === null ? (metricRow.current > 0 ? 'Nuevo' : '—') : ((metricRow.pct > 0 ? '+' : '') + metricRow.pct.toFixed(1) + '%');
+      var programadoCellStyle = analysis.metricKey === 'programado'
+        ? ' style="background:#fefce8 !important;border-color:#e0a030 !important"'
+        : '';
       var weekCells = weeks.map(function(week){
-        return '<td data-field="week-'+week+'">'+_resumenAnalysisNumber(metricRow.weekValues[week])+'</td>';
+        return '<td data-field="week-'+week+'"'+programadoCellStyle+'>'+_resumenAnalysisNumber(metricRow.weekValues[week])+'</td>';
       }).join('');
       var differenceCells = analysis.comparisonPairs.map(function(pair){
         var value = (metricRow.weekValues[pair.to] || 0) - (metricRow.weekValues[pair.from] || 0);
         var valueClass = value > 0 ? 'up' : value < 0 ? 'down' : 'stable';
-        return '<td data-field="diff-'+pair.from+'-'+pair.to+'" class="analysis-change '+valueClass+'"><strong>'+_resumenAnalysisDelta(value)+'</strong></td>';
+        return '<td data-field="diff-'+pair.from+'-'+pair.to+'" class="analysis-change '+valueClass+'"'+programadoCellStyle+'><strong>'+_resumenAnalysisDelta(value)+'</strong></td>';
       }).join('');
       return weekCells+
         differenceCells+
-        '<td data-field="difference" class="analysis-change '+metricRow.status.key+'"><strong>'+_resumenAnalysisDelta(metricRow.delta)+'</strong></td>'+
-        '<td data-field="variation" class="analysis-percent '+metricRow.status.key+'">'+pctText+'</td>'+
-        '<td data-field="status"><span class="analysis-status '+metricRow.status.key+'">'+metricRow.status.label+'</span></td>';
+        '<td data-field="difference" class="analysis-change '+metricRow.status.key+'"'+programadoCellStyle+'><strong>'+_resumenAnalysisDelta(metricRow.delta)+'</strong></td>'+
+        '<td data-field="variation" class="analysis-percent '+metricRow.status.key+'"'+programadoCellStyle+'>'+pctText+'</td>'+
+        '<td data-field="status"'+programadoCellStyle+'><span class="analysis-status '+metricRow.status.key+'">'+metricRow.status.label+'</span></td>';
     }
     var order = [
       {key:'up', label:'SUBIENDO'},
@@ -6012,7 +6017,7 @@ function renderResumenAnalysis(){
     var periodDropzone = '<span class="analysis-period-dropzone" onmouseenter="resumenAnalysisPeriodMouseEnter(event)" onmouseleave="resumenAnalysisPeriodMouseLeave(event)" onmouseup="resumenAnalysisPeriodDrop(event)" ondragover="resumenAnalysisPeriodDragOver(event)" ondragleave="resumenAnalysisPeriodDragLeave(event)" ondrop="resumenAnalysisPeriodDrop(event)">'+
       activeFieldsHtml+'<small>Arrastra campos aquí</small></span>';
     return '<section class="analysis-management-section" style="width:min('+gridWidth+'px,100%)"><h3><span class="analysis-section-title">'+title+'</span>'+periodDropzone+'</h3>'+
-      '<div class="analysis-table-wrap"><table class="analysis-table" data-analysis-grid="'+gridKey+'" style="min-width:'+gridWidth+'px"><thead><tr>'+headerHtml+'</tr></thead><tbody>'+
+      '<div class="analysis-table-wrap"><table class="analysis-table'+programadoTableClass+'" data-analysis-grid="'+gridKey+'" style="min-width:'+gridWidth+'px"><thead><tr>'+headerHtml+'</tr></thead><tbody>'+
       (body || '<tr><td colspan="'+columnCount+'" class="analysis-no-rows">No hay ventas para comparar.</td></tr>')+
       '</tbody>'+totalRow+'</table></div></section>';
   }
@@ -6115,8 +6120,8 @@ function renderResumenAnalysis(){
               body += '<tr class="analysis-product-summary-row'+(metricAnalysis.metricKey === 'programado' ? ' analysis-programado-row' : '')+'">'+
                 (firstSummaryRow ? '<td data-field="name" rowspan="'+summaryRowCount+'" class="analysis-product-summary-label">Total por producto</td>' : '')+
                 (firstProductSummaryRow ? '<td data-field="product" rowspan="'+productRowspan+'" class="analysis-product-summary-product">'+_resumenAnalysisEscape(product.replace(/^BQT\s+/i,''))+'</td>' : '')+
-                (firstMetricSummaryRow ? '<td data-field="metric" rowspan="'+days.length+'" class="analysis-pivot-level-total"'+(metricAnalysis.metricKey === 'programado' ? ' style="background:#fff4c7!important;border-color:#e2c96d!important"' : '')+'>'+metricAnalysis.metricLabel+'</td>' : '')+
-                (isDayMode ? '<td data-field="day"'+(metricAnalysis.metricKey === 'programado' ? ' style="background:#fff4c7!important;border-color:#e2c96d!important"' : '')+'>'+dayNames[day]+'</td>' : '')+
+                (firstMetricSummaryRow ? '<td data-field="metric" rowspan="'+days.length+'" class="analysis-pivot-level-total">'+metricAnalysis.metricLabel+'</td>' : '')+
+                (isDayMode ? '<td data-field="day">'+dayNames[day]+'</td>' : '')+
                 metricCells(metricAnalysis, values)+'</tr>';
               firstSummaryRow = false;
               firstProductSummaryRow = false;
@@ -6128,7 +6133,7 @@ function renderResumenAnalysis(){
     }
     var totalRows = analyses.map(function(metricAnalysis){
       var totals = {};
-      var totalProgramadoStyle = metricAnalysis.metricKey === 'programado' ? ' style="background:#fff4c7!important;border-color:#e2c96d!important"' : '';
+      var totalProgramadoStyle = '';
       metricWeeks.forEach(function(week){
         totals[week] = Object.keys(metricAnalysis.byStore || {}).reduce(function(sum,store){
           if(!isDayMode) return sum + Number((metricAnalysis.byStore[store] || {})[week] || 0);

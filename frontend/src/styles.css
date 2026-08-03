@@ -1130,11 +1130,15 @@
     border-right:1px solid #c4d9f6 !important;
     border-bottom:1px solid #c4d9f6 !important;
   }
-  body.resumen-analysis-standalone .analysis-table tr.analysis-programado-row > td:not(.analysis-pivot-store-cell):not(.analysis-pivot-product-cell),
-  .analysis-table tr.analysis-programado-row > td:not(.analysis-pivot-store-cell):not(.analysis-pivot-product-cell) {
+  body.resumen-analysis-standalone .analysis-table tr.analysis-programado-row > td:not(.analysis-pivot-store-cell):not(.analysis-pivot-product-cell):not(.analysis-product-summary-product):not(.analysis-product-summary-label):not([data-field="name"]):not([data-field="metric"]):not([data-field="day"]),
+  .analysis-table tr.analysis-programado-row > td:not(.analysis-pivot-store-cell):not(.analysis-pivot-product-cell):not(.analysis-product-summary-product):not(.analysis-product-summary-label):not([data-field="name"]):not([data-field="metric"]):not([data-field="day"]) {
     background:#fff4c7 !important;
     border-right-color:#e2c96d !important;
     border-bottom-color:#e2c96d !important;
+  }
+  .analysis-table tr.analysis-total-row.analysis-programado-row > td[data-field="metric"] {
+    background:#fff4c7 !important;
+    border-color:#e2c96d !important;
   }
   body.resumen-analysis-standalone .analysis-table tr.analysis-pivot-product-total > td {
     background:linear-gradient(to bottom,#edf3fb 0,#e4eefa 20px,#e4eefa 100%) !important;
@@ -1149,6 +1153,30 @@
   .analysis-pivot-store-total td { background:#dfeaf6 !important; font-weight:700 !important; border-top:1px solid #789bc2 !important; }
   .analysis-pivot-store-total td:first-child { color:#173b67; }
   .analysis-pivot-total-label { background:#dfeaf6 !important; color:#173b67; font-weight:700 !important; }
+  /* Programado conserva su amarillo tanto con producto como solo por tienda. */
+  .analysis-table.analysis-programado-table tbody td[data-field^="week-"],
+  .analysis-table.analysis-programado-table tbody td[data-field^="diff-"],
+  .analysis-table.analysis-programado-table tbody td[data-field="difference"],
+  .analysis-table.analysis-programado-table tbody td[data-field="variation"],
+  .analysis-table.analysis-programado-table tbody td[data-field="status"],
+  .analysis-table.analysis-programado-table tfoot td[data-field^="week-"],
+  .analysis-table.analysis-programado-table tfoot td[data-field^="diff-"],
+  .analysis-table.analysis-programado-table tfoot td[data-field="difference"],
+  .analysis-table.analysis-programado-table tfoot td[data-field="variation"],
+  .analysis-table.analysis-programado-table tfoot td[data-field="status"] {
+    background:#fefce8 !important;
+    border-color:#e0a030 !important;
+  }
+  .analysis-table.analysis-programado-table tbody td[data-field^="week-"],
+  .analysis-table.analysis-programado-table tbody td[data-field^="diff-"],
+  .analysis-table.analysis-programado-table tbody td[data-field="difference"],
+  .analysis-table.analysis-programado-table tbody td[data-field="variation"],
+  .analysis-table.analysis-programado-table tfoot td[data-field^="week-"],
+  .analysis-table.analysis-programado-table tfoot td[data-field^="diff-"],
+  .analysis-table.analysis-programado-table tfoot td[data-field="difference"],
+  .analysis-table.analysis-programado-table tfoot td[data-field="variation"] {
+    color:#b45309 !important;
+  }
   .analysis-product-summary-heading td {
     height:26px !important;
     padding:5px 9px !important;
