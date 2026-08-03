@@ -7230,14 +7230,14 @@ function _getDateKeyFromSemDay(sem, dayStr) {
     });
 
     programadoSemKeys.forEach(function(semKey, programadoIndex){
-      var programadoRow = '<tr class="pivot-total" style="background:#fff4c7;color:#000">';
-      programadoRow += '<td style="position:static;background:#fff4c7;padding:3px 8px;font-size:15px;font-weight:normal;color:#7c4a03">Sum of Programado<div style="font-size:15px;font-weight:bold;margin-top:2px">'+semKey+'</div></td>';
+      var programadoRow = '<tr class="pivot-total" style="background:#fefce8 !important;color:#000">';
+      programadoRow += '<td style="position:static;background:#fefce8 !important;padding:3px 8px;font-size:15px;font-weight:normal;color:#e65100 !important">Sum of Programado<div style="font-size:15px;font-weight:bold;margin-top:2px;color:#e65100 !important">'+semKey+'</div></td>';
       dayGroups.forEach(function(group, gi){
         var value = programadoTotalsSem[semKey][gi] || 0;
-        programadoRow += '<td style="font-size:14px;position:static;background:#fff4c7;color:#7c4a03;text-align:right;width:68px;min-width:68px;max-width:68px;padding:3px 8px;vertical-align:middle">'+(value ? fmt(value) : '')+'</td>';
+        programadoRow += '<td style="font-size:14px;position:static;background:#fefce8 !important;color:#b45309 !important;text-align:right;width:68px;min-width:68px;max-width:68px;padding:3px 8px;vertical-align:middle">'+(value ? fmt(value) : '')+'</td>';
       });
       var programadoGrand = programadoTotalsSem[semKey].reduce(function(sum, value){ return sum + (parseFloat(value) || 0); }, 0);
-      programadoRow += '<td style="font-size:14px;position:static;background:#fff4c7;color:#7c4a03;text-align:right;width:82px;min-width:82px;padding:3px 8px;font-weight:bold;border-left:2px solid #e2c96d;border-right:1px solid #e2c96d">'+fmt(programadoGrand)+'</td></tr>';
+      programadoRow += '<td style="font-size:14px;position:static;background:#fefce8 !important;color:#bf360c !important;text-align:right;width:82px;min-width:82px;padding:3px 8px;font-weight:bold;border-left:2px solid #e0a030;border-right:1px solid #e0e6f0">'+fmt(programadoGrand)+'</td></tr>';
       totalRowsGroup.push(programadoRow);
     });
 
@@ -7825,14 +7825,14 @@ function _getDateKeyFromSemDay(sem, dayStr) {
   });
 
   programadoSemKeysNorm.forEach(function(semKey){
-    var programadoRowNorm = '<tr class="pivot-total bg-amber-100 text-amber-900 font-bold border-t border-amber-300">';
-    programadoRowNorm += '<td class="px-3 py-2 border-r border-amber-300 font-bold text-[13px] bg-amber-100">Sum of Programado<div style="font-size:12px;margin-top:2px">'+semKey+'</div></td>';
+    var programadoRowNorm = '<tr class="pivot-total font-bold border-t border-amber-300" style="background:#fff4c7;color:#7c4a03">';
+    programadoRowNorm += '<td class="px-3 py-2 border-r border-amber-300 font-bold text-[13px]" style="background:#fff4c7;color:#7c4a03">Sum of Programado<div style="font-size:12px;margin-top:2px">'+semKey+'</div></td>';
     pivot.columns.forEach(function(col, ci){
       var value = programadoTotalsNorm[semKey][ci] || 0;
-      programadoRowNorm += '<td class="text-[13px] text-right px-2 py-2 border-r border-amber-300 bg-amber-100">'+(value ? fmt(value) : '')+'</td>';
+      programadoRowNorm += '<td class="text-[13px] text-right px-2 py-2 border-r border-amber-300" style="background:#fff4c7;color:#7c4a03">'+(value ? fmt(value) : '')+'</td>';
     });
     var programadoGrandNorm = programadoTotalsNorm[semKey].reduce(function(sum, value){ return sum + (parseFloat(value) || 0); }, 0);
-    programadoRowNorm += '<td class="text-[13px] text-right px-2 py-2 bg-amber-100 border-l-2 border-amber-400">'+fmt(programadoGrandNorm)+'</td></tr>';
+    programadoRowNorm += '<td class="text-[13px] text-right px-2 py-2 border-l-2 border-amber-400" style="background:#fff4c7;color:#7c4a03">'+fmt(programadoGrandNorm)+'</td></tr>';
     totalRowsGroupNorm.push(programadoRowNorm);
   });
 
