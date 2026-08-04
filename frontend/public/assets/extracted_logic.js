@@ -1921,7 +1921,6 @@ function renderTienda(){
 // ─── INVENTARIO ─────────────────────────────────────────────────────────────
 function renderInventario(){
   document.getElementById('viewInventario').style.display = 'grid';
-
   var det = DATA.detalle_inventario;
   
   if(!det || !det.fechas || det.fechas.length === 0){
@@ -1935,6 +1934,11 @@ function renderInventario(){
 
   var sems    = getSemanasActivas();
   var detData = det.data;
+  function invDateKey(value){
+    var m = String(value || '').trim().match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+    if(!m) return String(value || '');
+    return m[3] + String(m[2]).padStart(2,'0') + String(m[1]).padStart(2,'0');
+  }
   var tiendas = Object.keys(detData).sort();
 
   // ── Determinar fechas a mostrar según semanas activas ──
@@ -1952,6 +1956,7 @@ function renderInventario(){
     // Mantener el orden cronológico original
     fechas = (det.fechas || []).filter(function(f){ return fechasSet[f]; });
   }
+  fechas = fechas.slice().sort(function(a,b){ return invDateKey(a).localeCompare(invDateKey(b)); });
 
   if(fechas.length === 0){
     document.getElementById('tInvTiendaHead').innerHTML = '<tr><th colspan="2">Sin datos para las semanas seleccionadas</th></tr>';

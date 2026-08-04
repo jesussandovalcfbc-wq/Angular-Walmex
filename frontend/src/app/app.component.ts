@@ -190,6 +190,9 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnInit() {
+    // Adaptador de presentación: el legado conserva el contrato de datos y
+    // DevExtreme dibuja únicamente las tablas de Inventario Actual.
+
     this.dataCheckInterval = setInterval(() => {
       const w = window as any;
       if (w.DATA && w.DATA.tiendas && w.DATA.productos) {

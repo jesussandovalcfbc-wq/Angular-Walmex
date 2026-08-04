@@ -5,6 +5,71 @@
 @import "tailwindcss";
 @source "./assets";
 
+.bootstrap-inventory-table {
+  min-width: 680px;
+  margin-bottom: 0;
+  font-family: "Lato", "Segoe UI", Arial, sans-serif;
+  font-size: 11px;
+  border-color: #b7cbe1;
+  background: #fff;
+}
+
+.bootstrap-inventory-table th,
+.bootstrap-inventory-table td {
+  font-family: "Lato", "Segoe UI", Arial, sans-serif;
+}
+
+.bootstrap-inventory-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: .25rem .38rem;
+    font-size: 10px;
+  border-color: #b7cbe1;
+  background: #eaf2fb;
+  color: #173b63;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.bootstrap-inventory-table tbody td {
+  padding: .24rem .38rem;
+    font-size: 11px;
+  border-color: #d0deeb;
+  vertical-align: middle;
+}
+
+.bootstrap-inventory-table tbody tr:hover td {
+  background: #f4f8fc;
+}
+
+.bootstrap-inventory-table tbody tr.total td,
+.bootstrap-inventory-table tbody tr.total:hover td {
+  background: #dfeaf6;
+  color: #173b63;
+  font-weight: 700;
+}
+
+.bootstrap-inventory-table td.inv-has-value {
+  background: #fff2bf;
+  color: #7a4b00;
+  font-weight: 600;
+}
+
+/* Navegación original: Bootstrap no debe alterar el estado activo. */
+.hdr #btnProd.is-active,
+.hdr #btnTiend.is-active,
+.hdr #btnComp.is-active,
+.hdr #btnInv.is-active,
+.hdr #btnGasto.is-active,
+.hdr #btnResumen.is-active,
+.hdr #btnChoferes.is-active {
+  border-color: #155eef !important;
+  background: #155eef !important;
+  color: #fff !important;
+  box-shadow: inset 0 -3px 0 #fbbf24, 0 3px 8px rgb(21 94 239 / .22) !important;
+}
+
 @theme {
   --font-sans: "Lato", "Source Sans Pro", "Segoe UI", Arial, sans-serif;
   --color-retail: #0f4c81;
