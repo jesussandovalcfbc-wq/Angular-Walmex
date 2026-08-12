@@ -1518,6 +1518,61 @@ function renderChoferes() {
         });
     }
     
+    // ── Auto-palomear Walmart: buscar grupos CFBC consolidados que coincidan ──
+    // Construir mapa de grupos CFBC consolidados: { fecha|tienda => totalUnidades }
+    var cfbcConsolidadoMap = {};
+    if (DATABASE_DATA && DATABASE_DATA.length > 0) {
+        DATABASE_DATA.forEach(function(row) {
+            var rowFecha = normalizeChoferesDate(row.diario || row.fecha || '');
+            var rowKey = rowFecha + '|' + (row.tienda || '') + '|' + (row.producto || '');
+            var esProcesado = !!(row.url_acuse || row.razon_sin_acuse || checkedCFBC.has(rowKey));
+            if (!esProcesado) return;
+            // Agrupar por fecha|tienda para obtener total de unidades por grupo
+            var grupoKey = rowFecha + '|' + (row.tienda || '');
+            if (!cfbcConsolidadoMap[grupoKey]) cfbcConsolidadoMap[grupoKey] = 0;
+            cfbcConsolidadoMap[grupoKey] += parseInt(row.unidades || 0);
+        });
+    }
+
+    // Agrupar wmRows por fecha para calcular totales de grupo Walmart
+    var wmGrupoTotales = {};
+    wmRows.forEach(function(row) {
+        var normFecha = row.fecha.replace(/\//g, '-');
+        var grupoKey = normFecha + '|' + row.tienda;
+        if (!wmGrupoTotales[grupoKey]) wmGrupoTotales[grupoKey] = { total: 0, rows: [] };
+        wmGrupoTotales[grupoKey].total += row.unidades;
+        wmGrupoTotales[grupoKey].rows.push(row);
+    });
+
+    // Por cada grupo Walmart, buscar un grupo CFBC con fecha -1 o -2 días y mismo total
+    Object.keys(wmGrupoTotales).forEach(function(wmGrupoKey) {
+        var parts = wmGrupoKey.split('|');
+        var wmFecha = parts[0];
+        var wmTiendaNom = parts[1];
+        var wmTotal = wmGrupoTotales[wmGrupoKey].total;
+
+        // Calcular fechas -1 y -2 días
+        var d = new Date(wmFecha + 'T12:00:00');
+        var fechas = [-1, -2].map(function(offset) {
+            var dd = new Date(d);
+            dd.setDate(dd.getDate() + offset);
+            return dd.toISOString().slice(0, 10);
+        });
+
+        var matched = fechas.some(function(f) {
+            var cfbcKey = f + '|' + wmTiendaNom;
+            return cfbcConsolidadoMap[cfbcKey] !== undefined && cfbcConsolidadoMap[cfbcKey] === wmTotal;
+        });
+
+        if (matched) {
+            // Palomear todas las filas de este grupo Walmart (sin borrar las ya existentes)
+            wmGrupoTotales[wmGrupoKey].rows.forEach(function(row) {
+                checkedWalmart.add(row.key);
+            });
+        }
+    });
+    // ── Fin auto-palomear Walmart ──
+
     var wmHTML = '';
     if (wmRows.length > 0) {
         wmRows.sort(function(a, b){ return a.fecha < b.fecha ? -1 : (a.fecha > b.fecha ? 1 : 0); });
@@ -1978,13 +2033,33 @@ function renderInventario(){
   function buildHead(firstColLabel){
     var h = '<tr><th>'+firstColLabel+'</th>';
     fechas.forEach(function(f){ h += '<th>'+f+'</th>'; });
-    h += '<th>Total</th>';
     return h + '</tr>';
   }
   document.getElementById('tInvTiendaHead').innerHTML   = buildHead('Tienda');
   document.getElementById('tInvProductoHead').innerHTML = buildHead('Producto');
 
-  var q = function(v){ return '<td class="'+(Number(v)!==0?'inv-has-value':'')+'">' + fmt(v) + '</td>'; };
+  var q = function(v, isLatest){
+    var cls = '';
+    if (Number(v) !== 0) {
+      cls = isLatest ? 'inv-has-value' : 'inv-has-value-old';
+    }
+    return '<td class="'+cls+'">' + fmt(v) + '</td>'; 
+  };
+
+  function renderVals(vals) {
+      var html = '';
+      var lastNonZeroIdx = -1;
+      for (var k = vals.length - 1; k >= 0; k--) {
+         if (Number(vals[k]) !== 0) {
+            lastNonZeroIdx = k;
+            break;
+         }
+      }
+      vals.forEach(function(v, i) {
+         html += q(v, i === lastNonZeroIdx);
+      });
+      return html;
+  }
 
   // ── Tabla izquierda: totales por tienda ──
   var rowsTienda = '';
@@ -2005,15 +2080,10 @@ function renderInventario(){
       var sel = (state.invMode==='tienda' && state.invSelected===t);
       var st2 = sel ? ' style="background:#e8f0fe;font-weight:700;cursor:pointer"' : ' style="cursor:pointer"';
       rowsTienda += '<tr'+st2+' onclick="selInvTienda(\''+t.replace(/'/g,"\\'")+'\')"><td>'+t+'</td>';
-      vals.forEach(function(v){ rowsTienda += q(v); });
-      rowsTienda += q(rowTotal);
+      rowsTienda += renderVals(vals);
       rowsTienda += '</tr>';
     }
   });
-  rowsTienda += '<tr class="total"><td>Total</td>';
-  totT.forEach(function(v){ rowsTienda += q(v); });
-  rowsTienda += q(grandTotT);
-  rowsTienda += '</tr>';
   document.getElementById('tInvTienda').innerHTML = rowsTienda;
 
   // ── Tabla derecha: por producto (filtrada si hay tienda seleccionada) ──
@@ -2043,15 +2113,10 @@ function renderInventario(){
       vals.forEach(function(v,i){ totP[i] += v; });
       grandTotP += rowTotal;
       rowsProducto += '<tr><td>'+p.replace('BQT ','')+'</td>';
-      vals.forEach(function(v){ rowsProducto += q(v); });
-      rowsProducto += q(rowTotal);
+      rowsProducto += renderVals(vals);
       rowsProducto += '</tr>';
     }
   });
-  rowsProducto += '<tr class="total"><td>Total</td>';
-  totP.forEach(function(v){ rowsProducto += q(v); });
-  rowsProducto += q(grandTotP);
-  rowsProducto += '</tr>';
 
   document.getElementById('invProductoTitle').innerHTML = title;
   document.getElementById('tInvProducto').innerHTML = rowsProducto;
@@ -2095,32 +2160,25 @@ function renderInventario(){
       if(rowTotal > 0){
         vals.forEach(function(v,i){ cfTotT[i] += v; });
         cfGrandTotT += rowTotal;
-        var sel = (state.invMode==='tienda' && state.invSelected===t);
+        var sel = (state.cfMode==='tienda' && state.cfSelected===t);
         var st2 = sel ? ' style="background:#e8f0fe;font-weight:700;cursor:pointer"' : ' style="cursor:pointer"';
         var escapedT = t.split("'").join("\\\\'");
-        cfRowsTienda += "<tr" + st2 + " onclick='selInvTienda(\"" + escapedT + "\")'><td>" + t + "</td>";
-        vals.forEach(function(v){ cfRowsTienda += q(v); });
-        cfRowsTienda += q(rowTotal);
+        cfRowsTienda += "<tr" + st2 + " onclick='selCfTienda(\"" + escapedT + "\")'><td>" + t + "</td>";
+        cfRowsTienda += renderVals(vals);
         cfRowsTienda += '</tr>';
       }
     });
-    if (cfGrandTotT > 0) {
-      cfRowsTienda += '<tr class="total"><td>Total</td>';
-      cfTotT.forEach(function(v){ cfRowsTienda += q(v); });
-      cfRowsTienda += q(cfGrandTotT);
-      cfRowsTienda += '</tr>';
-    }
     if(document.getElementById('tCfTienda')) document.getElementById('tCfTienda').innerHTML = cfRowsTienda;
     
     var cfRowsProducto = '';
     var cfTotP = cfFechas.map(function(){ return 0; });
     var cfGrandTotP = 0;
     var cfTitle = '<i class="fa-solid fa-snowflake" style="color:#0ea5e9; margin-right:4px;"></i> Cuarto Frío — Productos';
-    var cfFiltro = (state.invMode==='tienda' && state.invSelected) ? [state.invSelected] : cfTiendas;
+    var cfFiltro = (state.cfMode==='tienda' && state.cfSelected) ? [state.cfSelected] : cfTiendas;
     
-    if(state.invMode==='tienda' && state.invSelected){
-      cfTitle = '<i class="fa-solid fa-snowflake" style="color:#0ea5e9; margin-right:4px;"></i> Cuarto Frío — '+state.invSelected.replace('SC ','')+
-        ' <button onclick="limpiarInvFiltro()" style="margin-left:8px;padding:2px 6px;background:#999;color:white;border:none;border-radius:3px;cursor:pointer;font-size:.65rem">✕</button>';
+    if(state.cfMode==='tienda' && state.cfSelected){
+      cfTitle = '<i class="fa-solid fa-snowflake" style="color:#0ea5e9; margin-right:4px;"></i> Cuarto Frío — '+state.cfSelected.replace('SC ','')+
+        ' <button onclick="limpiarCfFiltro()" style="margin-left:8px;padding:2px 6px;background:#999;color:white;border:none;border-radius:3px;cursor:pointer;font-size:.65rem">✕</button>';
     }
     
     cfProds.forEach(function(p){
@@ -2138,17 +2196,10 @@ function renderInventario(){
         vals.forEach(function(v,i){ cfTotP[i] += v; });
         cfGrandTotP += rowTotal;
         cfRowsProducto += '<tr><td>'+p.replace('BQT ','')+'</td>';
-        vals.forEach(function(v){ cfRowsProducto += q(v); });
-        cfRowsProducto += q(rowTotal);
+        cfRowsProducto += renderVals(vals);
         cfRowsProducto += '</tr>';
       }
     });
-    if (cfGrandTotP > 0) {
-      cfRowsProducto += '<tr class="total"><td>Total</td>';
-      cfTotP.forEach(function(v){ cfRowsProducto += q(v); });
-      cfRowsProducto += q(cfGrandTotP);
-      cfRowsProducto += '</tr>';
-    }
     
     if(document.getElementById('cfProductoTitle')) document.getElementById('cfProductoTitle').innerHTML = cfTitle;
     if(document.getElementById('tCfProducto')) document.getElementById('tCfProducto').innerHTML = cfRowsProducto;
@@ -8198,6 +8249,23 @@ function selInvTienda(t){
     state.invMode = 'tienda';
     state.invSelected = t;
   }
+  renderInventario();
+}
+
+function selCfTienda(t){
+  if(state.cfMode === 'tienda' && state.cfSelected === t){
+    state.cfMode = null;
+    state.cfSelected = null;
+  } else {
+    state.cfMode = 'tienda';
+    state.cfSelected = t;
+  }
+  renderInventario();
+}
+
+function limpiarCfFiltro() {
+  state.cfMode = null;
+  state.cfSelected = null;
   renderInventario();
 }
 
