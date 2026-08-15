@@ -716,7 +716,7 @@ export async function cargarDatos(cacheKey = "") {
       const raw = String(value || '').trim();
       const key = normalizar(raw).replace(/\s+/g, ' ');
       if (key === 'MEXICALI' || key === 'MXL' || key === 'MXL 1' || key === 'MXL1') return 'MXL 1';
-      if (key === 'RUTA 2000' || key === 'RUTA2000') return 'Ruta 2000';
+      if (key === 'RUTA 2000' || key === 'RUTA2000' || key === '2000') return 'Ruta 2000';
       if (key === 'RUTAS PLAYAS' || key === 'RUTA PLAYAS' || key === 'PLAYAS') return 'Rutas Playas';
       if (key === 'ENS' || key === 'ENSENADA') return 'ENS';
       return raw;
