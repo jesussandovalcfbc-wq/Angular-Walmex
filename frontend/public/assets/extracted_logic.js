@@ -862,6 +862,7 @@ function applyTiendaSelection(selected){
   syncChkTodasTiendas();
   if(state.view==='producto') render();
   else if(state.view==='resumen') renderResumen();
+  else if(state.view==='comparativo') renderComparativo();
   else renderTienda();
 }
 
@@ -895,10 +896,17 @@ function syncRutaSelectFromTiendas() {
 function onRutaChange(ruta) {
   var tiendaRuta = DATA.tienda_ruta || {};
   var chks = document.querySelectorAll('#tiendaDropMenu input[type=checkbox].tienda-chk');
+  var selected = [];
   chks.forEach(function(chk) {
     chk.checked = ruta === 'Todas' || tiendaRuta[chk.value] === ruta;
+    if (chk.checked) selected.push(chk.value);
   });
-  onTiendaChk();
+  applyTiendaSelection(selected);
+  // El selector de ruta vive en el encabezado global y también se usa en
+  // Comparativo, donde el menú de tiendas permanece oculto. Asegurar el
+  // render aquí evita dejar la tabla con los datos de la selección anterior.
+  var comparativo = document.getElementById('viewComparativo');
+  if (comparativo && comparativo.style.display !== 'none') renderComparativo();
 }
 
 function onTiendaChk(){
@@ -1018,6 +1026,7 @@ function applyProductoSelection(selected){
   syncChkTodosProductos();
   if(state.view==='producto') render();
   else if(state.view==='resumen') renderResumen();
+  else if(state.view==='comparativo') renderComparativo();
   else renderTienda();
 }
 function updateProductoLabel(){
@@ -7952,6 +7961,362 @@ function sumMetrics(semSet, tiendaSet, prodSet){
   return r;
 }
 
+// Gasto CFBC: desde la semana 27 de 2026 toma únicamente la sección
+// "Gasolina y Otros Gastos", excluyendo combustible. La nómina solo viene
+// por semana, así que se distribuye entre las cuatro rutas.
+var GASTO_CFBC_RUTAS = ['ENS', 'MXL 1', 'Ruta 2000', 'Rutas Playas'];
+var GASTO_CFBC_SEMANA_INICIAL = 202627;
+
+function gastoCfbcExpandido(){
+  return !!(state && state.gastoCfbcExpandido);
+}
+
+function toggleGastoCfbc(){
+  state.gastoCfbcExpandido = !gastoCfbcExpandido();
+  renderComparativo();
+}
+
+function esSemanaConGastoCfbc(s){
+  var n = Number(s);
+  return n >= GASTO_CFBC_SEMANA_INICIAL;
+}
+
+function gastoCfbcRutaSemana(ruta, s){
+  var desglose = gastoCfbcDesgloseRutaSemana(ruta, s);
+  return desglose.total;
+}
+
+function gastoCfbcDesgloseRutaSemana(ruta, s){
+  var resultado = {nomina:0, casetas:0, comida:0, otros:0, total:0};
+  if(!esSemanaConGastoCfbc(s)) return resultado;
+
+  var gastosOtros = (DATA && DATA.gastos_otros) || {};
+  var rutaData = gastosOtros[ruta] || {};
+  Object.keys(rutaData).forEach(function(concepto){
+    var conceptoData = rutaData[concepto] || {};
+    var valor = Number(conceptoData[String(s)] || conceptoData[s] || 0);
+    var nombre = String(concepto).toUpperCase();
+
+    // El combustible queda fuera por ahora. La nómina se toma de nomina_data.
+    if(/GASOLINA|COMBUSTIBLE|DIESEL|NOMINA/.test(nombre)) return;
+    if(nombre.indexOf('CASETA') >= 0) resultado.casetas += valor;
+    else if(nombre.indexOf('COMIDA') >= 0) resultado.comida += valor;
+    else resultado.otros += valor;
+  });
+
+  var nominaData = (DATA && DATA.nomina_data) || {};
+  var nominaSemana = Number(nominaData[String(s)] || nominaData[s] || 0);
+  resultado.nomina = nominaSemana / GASTO_CFBC_RUTAS.length;
+  resultado.total = resultado.nomina + resultado.casetas + resultado.comida + resultado.otros;
+  return resultado;
+}
+
+function gastoCfbcDesgloseParaSemanas(semSet, tiendaSet){
+  var rutasActivas = [];
+  var tiendaRuta = (DATA && DATA.tienda_ruta) || {};
+  (tiendaSet || []).forEach(function(t){
+    var ruta = tiendaRuta[t];
+    if(ruta && GASTO_CFBC_RUTAS.indexOf(ruta) >= 0 && rutasActivas.indexOf(ruta) < 0){
+      rutasActivas.push(ruta);
+    }
+  });
+  if(!rutasActivas.length) return null;
+
+  var encontrado = false;
+  var total = {nomina:0, casetas:0, comida:0, otros:0, total:0};
+  (semSet || []).forEach(function(s){
+    if(!esSemanaConGastoCfbc(s)) return;
+    encontrado = true;
+    rutasActivas.forEach(function(ruta){
+      var desglose = gastoCfbcDesgloseRutaSemana(ruta, s);
+      total.nomina += desglose.nomina;
+      total.casetas += desglose.casetas;
+      total.comida += desglose.comida;
+      total.otros += desglose.otros;
+      total.total += desglose.total;
+    });
+  });
+  return encontrado ? total : null;
+}
+
+function gastoCfbcParaSemanas(semSet, tiendaSet){
+  var desglose = gastoCfbcDesgloseParaSemanas(semSet, tiendaSet);
+  return desglose ? desglose.total : null;
+}
+
+function celdaGastoCfbc(valor){
+  return valor === null || valor === undefined ? '<td>—</td>' : '<td>$'+fmt(valor)+'</td>';
+}
+
+function celdasGastoCfbcDesglose(desglose){
+  if(!gastoCfbcExpandido()) return '';
+  if(!desglose) return '<td>—</td><td>—</td><td>—</td><td>—</td>';
+  return '<td>$'+fmt(desglose.nomina)+'</td>'
+    +'<td>$'+fmt(desglose.casetas)+'</td>'
+    +'<td>$'+fmt(desglose.comida)+'</td>'
+    +'<td>$'+fmt(desglose.otros)+'</td>';
+}
+
+function celdasGastoCfbcDesgloseVacias(){
+  return gastoCfbcExpandido() ? '<td>—</td><td>—</td><td>—</td><td>—</td>' : '';
+}
+
+function nombreArchivoComparativo(modo){
+  var sems = getSemanasActivas();
+  var rutaEl = document.getElementById('rutaSelect');
+  var ruta = rutaEl && rutaEl.value ? rutaEl.value : 'Todas las rutas';
+  var periodo = sems.length ? sems.join('-') : 'actual';
+  var rutaSegura = String(ruta).replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_-]/g,'');
+  var tipo = modo === 'resumen' ? 'Resumen' : 'Detalle';
+  return 'Comparativo_'+periodo+'_'+(rutaSegura || 'Todas_las_rutas')+'_'+tipo+'.xlsx';
+}
+
+function tablaComparativoParaExportar(modo){
+  var tablaActual = document.getElementById('tComp');
+  if(!tablaActual) return null;
+
+  // Detalle: fuerza todas las semanas seleccionadas y todas sus tiendas abiertas
+  // únicamente para construir el archivo; la pantalla se restaura al terminar.
+  if(modo === 'detalle'){
+    var sems = getSemanasActivas();
+    var semsAct = sems.length ? sems : DATA.semanas.slice(-4);
+    var tiendas = getTiendasActivas();
+    var openSemanasPrev = state.openSemanas ? state.openSemanas.slice() : [];
+    var openTiendasPrev = {};
+    Object.keys(state.openTiendas || {}).forEach(function(s){
+      openTiendasPrev[s] = (state.openTiendas[s] || []).slice();
+    });
+
+    state.openSemanas = semsAct.slice();
+    state.openTiendas = {};
+    semsAct.forEach(function(s){ state.openTiendas[s] = tiendas.slice(); });
+    renderComparativo();
+    var detalle = document.getElementById('tComp').cloneNode(true);
+
+    state.openSemanas = openSemanasPrev;
+    state.openTiendas = openTiendasPrev;
+    renderComparativo();
+    return detalle;
+  }
+
+  var resumen = tablaActual.cloneNode(true);
+  resumen.querySelectorAll('tbody tr').forEach(function(row){
+    if(!row.classList.contains('pivot-row-sem') && !row.classList.contains('total')) row.remove();
+  });
+  return resumen;
+}
+
+function exportComparativoExcelFallback(tabla, modo){
+  if(!tabla) return;
+  var html = '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><meta charset="utf-8">'
+    +'<style>body{font-family:Arial}table{border-collapse:collapse;font-size:10pt}th{background:#e4edf7;color:#1e4e79;font-weight:bold;padding:7px;border:1px solid #cbd5e1}td{padding:6px;border:1px solid #e2e8f0}tr.total td{background:#dbe8f5;font-weight:bold}.merma{background:#fff1f2;color:#881337}.gasto{background:#fffbeb;color:#92400e}</style>'
+    +'<body><h2 style="background:#0b2745;color:white;padding:10px">Comparativo</h2>'
+    +'<table>'+tabla.innerHTML+'</table></body></html>';
+  var blob = new Blob([html], {type:'application/vnd.ms-excel;charset=utf-8'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = nombreArchivoComparativo(modo).replace(/\.xlsx$/i,'.xls');
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+}
+
+function comparativoExcelColumna(texto){
+  var t = String(texto || '').toUpperCase();
+  if(t.indexOf('MERMA') >= 0) return 'merma';
+  if(t.indexOf('NÓMINA') >= 0 || t.indexOf('NOMINA') >= 0
+    || t.indexOf('CASETA') >= 0 || t.indexOf('COMIDA') >= 0 || t.indexOf('OTROS') >= 0) return 'gasto';
+  return 'normal';
+}
+
+function comparativoExcelValor(texto){
+  var t = String(texto == null ? '' : texto).replace(/\s+/g,' ').trim()
+    .replace(/^[▶▼▸▾]\s*/,'')
+    .replace(/\s*clic para (?:abrir|cerrar)\s*/gi,' ')
+    .replace(/(\d+)\s*\.\s*(\d+)\s*%/g,'$1.$2%')
+    .replace(/([A-Za-zÁÉÍÓÚÜÑáéíóúüñ])(?=\d+(?:\.\d+)?%)/g,'$1 ')
+    .replace(/\s+/g,' ').trim();
+  if(!t || t === '—' || t === '-' || t === '–') return null;
+  var esPorcentaje = /%$/.test(t);
+  var limpio = t.replace(/[$,%\s]/g,'').replace(/,/g,'');
+  if(/^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(limpio)){
+    var numero = Number(limpio);
+    return esPorcentaje ? numero / 100 : numero;
+  }
+  return t;
+}
+
+function comparativoExcelDireccion(row, col){
+  return XLSX.utils.encode_cell({r:row, c:col});
+}
+
+function comparativoExcelBorde(color){
+  return {
+    top:{style:'thin', color:{rgb:color}},
+    bottom:{style:'thin', color:{rgb:color}},
+    left:{style:'thin', color:{rgb:color}},
+    right:{style:'thin', color:{rgb:color}}
+  };
+}
+
+function libroComparativoFormateado(tabla, modo){
+  var encabezados = Array.prototype.slice.call(tabla.querySelectorAll('thead tr:first-child th'))
+    .map(function(th){ return String(th.textContent || '').replace(/\s+/g,' ').trim(); });
+  var filas = Array.prototype.slice.call(tabla.querySelectorAll('tbody tr'));
+  var sems = getSemanasActivas();
+  var rutaEl = document.getElementById('rutaSelect');
+  var ruta = rutaEl && rutaEl.value ? rutaEl.value : 'Todas las rutas';
+  var periodo = sems.length ? sems.join(', ') : 'Periodo actual';
+  var tituloModo = modo === 'resumen' ? 'Resumen por semana' : 'Detalle completo';
+  var aoa = [
+    ['Comparativo'],
+    ['Periodo: '+periodo, 'Ruta: '+ruta, 'Vista: '+tituloModo],
+    encabezados
+  ];
+  var clasesFila = [];
+  filas.forEach(function(tr){
+    clasesFila.push(tr.className || '');
+    aoa.push(Array.prototype.slice.call(tr.children).map(function(td){
+      return comparativoExcelValor(td.textContent);
+    }));
+  });
+
+  var hoja = XLSX.utils.aoa_to_sheet(aoa);
+  var ultimaCol = encabezados.length - 1;
+  var ultimaFila = aoa.length - 1;
+  hoja['!merges'] = [{s:{r:0,c:0}, e:{r:0,c:ultimaCol}}];
+  hoja['!freeze'] = {xSplit:1, ySplit:3};
+  hoja['!autofilter'] = {ref:'A3:'+XLSX.utils.encode_col(ultimaCol)+String(ultimaFila + 1)};
+  hoja['!cols'] = encabezados.map(function(h, i){
+    var t = h.toUpperCase();
+    if(i === 0) return {wch:30};
+    if(t.indexOf('EMBARQUE') >= 0) return {wch:20};
+    if(t.indexOf('%') >= 0 || t.indexOf('VS ANT') >= 0) return {wch:13};
+    if(t.indexOf('VENTA') >= 0 || t.indexOf('GASTO') >= 0 || t.indexOf('MERMA $') >= 0) return {wch:15};
+    return {wch:13};
+  });
+  hoja['!rows'] = [{hpt:25}, {hpt:19}, {hpt:28}];
+
+  var azulOscuro = '0B2745';
+  var azulClaro = 'E4EDF7';
+  var azulFila = 'C9E2F7';
+  var azulTotal = 'DBE8F5';
+  var borde = 'D5E2E5';
+  var estiloTitulo = {
+    fill:{patternType:'solid', fgColor:{rgb:azulOscuro}},
+    font:{name:'Arial', sz:13, bold:true, color:{rgb:'FFFFFF'}},
+    alignment:{horizontal:'left', vertical:'center'},
+    border:comparativoExcelBorde(azulOscuro)
+  };
+  var estiloMeta = {
+    fill:{patternType:'solid', fgColor:{rgb:'F3F6FA'}},
+    font:{name:'Arial', sz:10, color:{rgb:'475569'}},
+    alignment:{horizontal:'left', vertical:'center'},
+    border:comparativoExcelBorde('E2E8F0')
+  };
+  var estiloHeader = {
+    fill:{patternType:'solid', fgColor:{rgb:azulClaro}},
+    font:{name:'Arial', sz:10, bold:true, color:{rgb:'1E4E79'}},
+    alignment:{horizontal:'center', vertical:'center', wrapText:true},
+    border:comparativoExcelBorde(borde)
+  };
+  for(var c=0;c<=ultimaCol;c++){
+    var celdaTitulo = hoja[comparativoExcelDireccion(0,c)] || {t:'s', v:''};
+    celdaTitulo.s = estiloTitulo;
+    hoja[comparativoExcelDireccion(0,c)] = celdaTitulo;
+    var celdaMeta = hoja[comparativoExcelDireccion(1,c)] || {t:'s', v:''};
+    celdaMeta.s = estiloMeta;
+    hoja[comparativoExcelDireccion(1,c)] = celdaMeta;
+    var h = encabezados[c] || '';
+    var tipo = comparativoExcelColumna(h);
+    var header = hoja[comparativoExcelDireccion(2,c)] || {t:'s', v:h};
+    header.s = Object.assign({}, estiloHeader);
+    if(tipo === 'merma'){
+      header.s.fill = {patternType:'solid', fgColor:{rgb:'FFE4E6'}};
+      header.s.font = {name:'Arial', sz:10, bold:true, color:{rgb:'9F1239'}};
+    } else if(tipo === 'gasto'){
+      header.s.fill = {patternType:'solid', fgColor:{rgb:'FEF3C7'}};
+      header.s.font = {name:'Arial', sz:10, bold:true, color:{rgb:'92400E'}};
+    }
+    hoja[comparativoExcelDireccion(2,c)] = header;
+  }
+
+  var moneda = /VENTA|GASTO|NÓMINA|NOMINA|CASETA|COMIDA|OTROS|MERMA \$/;
+  var porcentaje = /% MERMA/;
+  for(var r=3;r<=ultimaFila;r++){
+    var clase = clasesFila[r-3] || '';
+    var esTotal = /\btotal\b/i.test(clase);
+    var esSemana = /pivot-row-sem/.test(clase);
+    var esProducto = /pivot-row-prod/.test(clase);
+    for(var j=0;j<=ultimaCol;j++){
+      var direccion = comparativoExcelDireccion(r,j);
+      var celda = hoja[direccion] || {t:'z', v:null};
+      var tipoColumna = comparativoExcelColumna(encabezados[j]);
+      var relleno = esTotal ? azulTotal : esSemana ? azulFila : esProducto ? 'F4FAFF' : 'FFFFFF';
+      if(tipoColumna === 'merma') relleno = 'FFE4E6';
+      if(tipoColumna === 'gasto') relleno = 'FFF2CC';
+      celda.s = {
+        fill:{patternType:'solid', fgColor:{rgb:relleno}},
+        font:{name:'Arial', sz:10, bold:!!(esTotal || esSemana), color:{rgb:tipoColumna === 'merma' ? '881337' : tipoColumna === 'gasto' ? '92400E' : '334155'}},
+        alignment:{horizontal:j === 0 ? 'left' : 'right', vertical:'center'},
+        border:comparativoExcelBorde('E2E8F0')
+      };
+      if(moneda.test(encabezados[j].toUpperCase())) celda.z = '$#,##0;[Red]($#,##0);-';
+      else if(porcentaje.test(encabezados[j].toUpperCase())) celda.z = '0.0%;[Red](0.0%);-';
+      else if(j > 0 && celda.t === 'n') celda.z = '#,##0;[Red](#,##0);-';
+      hoja[direccion] = celda;
+    }
+    hoja['!rows'][r] = {hpt:esProducto ? 18 : 21};
+  }
+  return {SheetNames:['Comparativo'], Sheets:{Comparativo:hoja}};
+}
+
+function exportComparativoExcel(modo){
+  var tabla = tablaComparativoParaExportar(modo);
+  if(!tabla) return;
+
+  var terminado = false;
+  function descargar(){
+    if(terminado) return;
+    terminado = true;
+    if(window.XLSX && XLSX.utils && XLSX.utils.aoa_to_sheet){
+      var libro = libroComparativoFormateado(tabla, modo);
+      XLSX.writeFile(libro, nombreArchivoComparativo(modo), {compression:true});
+    } else {
+      exportComparativoExcelFallback(tabla, modo);
+    }
+  }
+
+  if(window.XLSX && window.XLSX.__walmexXlsxStyle){
+    descargar();
+    return;
+  }
+
+  var existente = document.querySelector('script[data-comparativo-xlsx-style]');
+  if(existente){
+    existente.addEventListener('load', descargar, {once:true});
+    existente.addEventListener('error', descargar, {once:true});
+    setTimeout(descargar, 2500);
+    return;
+  }
+
+  var script = document.createElement('script');
+  script.src = 'https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js';
+  script.setAttribute('data-comparativo-xlsx-style','1');
+  script.onload = function(){
+    if(window.XLSX) window.XLSX.__walmexXlsxStyle = true;
+    descargar();
+  };
+  script.onerror = descargar;
+  document.head.appendChild(script);
+  setTimeout(descargar, 2500);
+}
+
+function exportComparativoDetalleExcel(){ exportComparativoExcel('detalle'); }
+function exportComparativoResumenExcel(){ exportComparativoExcel('resumen'); }
+
 // ── mini gráfica de barras compacta (W fijo, H pequeño) ─────────────────────
 function buildBarChart(labels, vals1, vals2, lbl1, lbl2, W, H){
   W = W||340; H = H||160;
@@ -7993,14 +8358,16 @@ function buildBarChart(labels, vals1, vals2, lbl1, lbl2, W, H){
 // ─── RENDER COMPARATIVO (solo Semana vs Semana) ───────────────────────────────
 function renderComparativo(){
   var sems = getSemanasActivas();
-  var tiendas = DATA.tiendas;
+  var tiendas = getTiendasActivas();
   var prods = getProductosActivos();
   var semsAct = sems.length ? sems : DATA.semanas.slice(-4);
 
   var headHTML = '<tr>'
     +'<th style="text-align:left;min-width:160px">Nivel</th>'
-    +'<th>Unidades</th><th>Venta CFBC</th><th>Venta WMX</th>'
-    +'<th>Merma U</th><th>Merma $</th><th>Embarque</th>'
+    +'<th>U. Vendidas</th><th>Venta WMX</th>'
+    +'<th class="comp-gasto-cfbc-toggle" onclick="toggleGastoCfbc()" title="Mostrar u ocultar desglose">Gasto CFBC</th>'
+    +(gastoCfbcExpandido()?'<th>Nómina</th><th>Casetas</th><th>Comida</th><th>Otros</th>':'')
+    +'<th>Merma U</th><th>Merma $</th><th>Embarque / Facturado</th>'
     +'<th>% Merma</th><th>vs Ant.</th></tr>';
 
   var bodyRows = [];
@@ -8019,6 +8386,8 @@ function renderComparativo(){
 
   semsAct.forEach(function(s){
     var m = sumMetrics([s], tiendas, prods);
+    var gastoCfbcSemDesglose = gastoCfbcDesgloseParaSemanas([s], tiendas);
+    var gastoCfbcSem = gastoCfbcSemDesglose ? gastoCfbcSemDesglose.total : null;
     var pm = m.emb>0?(m.mermaU/m.emb*100).toFixed(1)+'%':'\u2014';
     var vs = prevCFBC!==null ? pctSpan(m.cfbc,prevCFBC) : '\u2014';
     var semOpen = (state.openSemanas && state.openSemanas.indexOf(s) >= 0);
@@ -8028,8 +8397,9 @@ function renderComparativo(){
       +'<span style="font-size:.8rem;margin-right:4px;">'+(semOpen?'\u25bc':'\u25b6')+'</span>'
       +semLabel(s)+'</td>'
       +'<td>'+fmt(m.unid)+'</td>'
-      +'<td style="font-weight:700">$'+fmt(m.cfbc)+'</td>'
       +'<td>$'+fmt(m.wmx)+'</td>'
+      +celdaGastoCfbc(gastoCfbcSem)
+      +celdasGastoCfbcDesglose(gastoCfbcSemDesglose)
       +'<td class="'+(m.mermaU>0?'red':'')+'">'+fmt(m.mermaU)+'</td>'
       +'<td class="'+(m.mermaR>0?'red':'')+'">$'+fmt(m.mermaR)+'</td>'
       +'<td>'+fmt(m.emb)+'</td>'
@@ -8072,8 +8442,9 @@ function renderComparativo(){
             +'<span style="margin-left:5px;font-size:.65rem;color:#888;">'+share+'%</span>'
             +'</td>'
             +'<td>'+fmt(mt.unid)+'</td>'
-            +'<td style="font-weight:600">$'+fmt(mt.cfbc)+'</td>'
             +'<td>$'+fmt(mt.wmx)+'</td>'
+            +'<td>—</td>'
+            +celdasGastoCfbcDesgloseVacias()
             +'<td class="'+(mt.mermaU>0?'red':'')+'">'+fmt(mt.mermaU)+'</td>'
             +'<td class="'+(mt.mermaR>0?'red':'')+'">$'+fmt(mt.mermaR)+'</td>'
             +'<td>'+fmt(mt.emb)+'</td>'
@@ -8104,8 +8475,9 @@ function renderComparativo(){
               +'<span style="margin-left:8px;font-size:.62rem;color:#888;font-style:italic;">clic para cerrar</span>'
               +'</td>'
               +'<td>'+fmt(mt.unid)+'</td>'
-              +'<td style="font-weight:600">$'+fmt(mt.cfbc)+'</td>'
               +'<td>$'+fmt(mt.wmx)+'</td>'
+              +'<td>—</td>'
+              +celdasGastoCfbcDesgloseVacias()
               +'<td class="'+(mt.mermaU>0?'red':'')+'">'+fmt(mt.mermaU)+'</td>'
               +'<td class="'+(mt.mermaR>0?'red':'')+'">$'+fmt(mt.mermaR)+'</td>'
               +'<td>'+fmt(mt.emb)+'</td>'
@@ -8119,8 +8491,8 @@ function renderComparativo(){
               +'<td style="padding-left:40px;font-size:.68rem;color:#333;">'+o.p.replace('BQT ','')
               +'<span style="margin-left:4px;font-size:.62rem;color:#999;">'+sharep+'%</span></td>'
               +'<td style="font-size:.68rem">'+fmt(o.unid)+'</td>'
-              +'<td style="font-weight:600;font-size:.68rem">$'+fmt(o.cfbc)+'</td>'
               +'<td style="font-size:.68rem">$'+fmt(o.wmx)+'</td>'
+              +'<td style="font-size:.68rem">—</td>'
               +'<td class="'+(o.mermaU>0?'red':'')+'" style="font-size:.68rem">'+fmt(o.mermaU)+'</td>'
               +'<td class="'+(o.mermaR>0?'red':'')+'" style="font-size:.68rem">$'+fmt(o.mermaR)+'</td>'
               +'<td style="font-size:.68rem">'+fmt(o.emb)+'</td>'
@@ -8131,7 +8503,9 @@ function renderComparativo(){
           if(!ocultarTiendas){
             bodyRows.push('<tr style="background:#daeaf5;border-left:6px solid #5bc0de;font-weight:700;font-size:.68rem;">'
               +'<td style="padding-left:40px;color:#0071ce;">Subtotal '+x.t.replace('SC ','')+'</td>'
-              +'<td>'+fmt(totP.unid)+'</td><td>$'+fmt(totP.cfbc)+'</td><td>$'+fmt(totP.wmx)+'</td>'
+              +'<td>'+fmt(totP.unid)+'</td><td>$'+fmt(totP.wmx)+'</td>'
+              +'<td>—</td>'
+              +celdasGastoCfbcDesgloseVacias()
               +'<td class="red">'+fmt(totP.mermaU)+'</td><td class="red">$'+fmt(totP.mermaR)+'</td>'
               +'<td>'+fmt(totP.emb)+'</td><td></td><td></td></tr>');
           }
@@ -8141,26 +8515,33 @@ function renderComparativo(){
       var totAll2=sumMetrics([s],tiendas,prods);
       bodyRows.push('<tr style="background:#b8d4f0;font-weight:700;border-left:3px solid #0071ce;">'
         +'<td style="padding-left:22px;color:#0071ce;">Subtotal Sem '+semLabel(s)+'</td>'
-        +'<td>'+fmt(totAll2.unid)+'</td><td style="font-weight:700">$'+fmt(totAll2.cfbc)+'</td>'
+        +'<td>'+fmt(totAll2.unid)+'</td>'
         +'<td>$'+fmt(totAll2.wmx)+'</td>'
+        +celdaGastoCfbc(gastoCfbcSem)
+        +celdasGastoCfbcDesglose(gastoCfbcSemDesglose)
         +'<td class="red">'+fmt(totAll2.mermaU)+'</td><td class="red">$'+fmt(totAll2.mermaR)+'</td>'
         +'<td>'+fmt(totAll2.emb)+'</td><td></td><td></td></tr>');
     }
   });
 
   var totAll = sumMetrics(semsAct, tiendas, prods);
+  var gastoCfbcTotalDesglose = gastoCfbcDesgloseParaSemanas(semsAct, tiendas);
+  var gastoCfbcTotal = gastoCfbcTotalDesglose ? gastoCfbcTotalDesglose.total : null;
   bodyRows.push('<tr class="total"><td>TOTAL GENERAL</td>'
-    +'<td>'+fmt(totAll.unid)+'</td><td>$'+fmt(totAll.cfbc)+'</td><td>$'+fmt(totAll.wmx)+'</td>'
+    +'<td>'+fmt(totAll.unid)+'</td><td>$'+fmt(totAll.wmx)+'</td>'+celdaGastoCfbc(gastoCfbcTotal)
+    +celdasGastoCfbcDesglose(gastoCfbcTotalDesglose)
     +'<td class="red">'+fmt(totAll.mermaU)+'</td><td class="red">$'+fmt(totAll.mermaR)+'</td>'
     +'<td>'+fmt(totAll.emb)+'</td><td></td><td></td></tr>');
 
   document.getElementById('tCompHead').innerHTML = headHTML;
   document.getElementById('tCompBody').innerHTML = bodyRows.join('');
+  document.getElementById('tComp').classList.toggle('gasto-cfbc-expanded', gastoCfbcExpandido());
+  if(typeof window.syncPrimeComparativoTable === 'function') window.syncPrimeComparativoTable();
 
   // ── Gráfica lateral: actualiza según nivel activo ──────────────────────────
   var chartEl   = document.getElementById('compChart');
   var chartTitle = document.getElementById('compChartTitle');
-  var tiendas = DATA.tiendas; var prods = getProductosActivos();
+  var tiendas = getTiendasActivas(); var prods = getProductosActivos();
 
   // Obtener la primera tienda abierta (si hay alguna)
   var firstOpenSem = null;

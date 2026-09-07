@@ -170,7 +170,13 @@
 <div style="display:flex; gap:10px; align-items:flex-start; flex-wrap:wrap;">
 <!-- Columna izquierda: tabla pivot -->
 <div class="box" style="flex:1 1 420px; overflow:auto; min-width:320px;">
-<div class="box-hdr" id="compTableTitle">Comparativo — ▶ semana → tiendas → productos</div>
+<div class="box-hdr comp-table-toolbar" id="compTableTitle">
+<span>Comparativo — ▶ semana → tiendas → productos</span>
+<div class="comp-export-actions">
+<button id="btnExportCompDetalle" type="button" onclick="exportComparativoDetalleExcel(event)" title="Descargar detalle completo"><i class="fa-solid fa-file-excel" aria-hidden="true"></i> Descargar detalle</button>
+<button id="btnExportCompResumen" type="button" onclick="exportComparativoResumenExcel(event)" title="Descargar resumen por semana"><i class="fa-solid fa-file-arrow-down" aria-hidden="true"></i> Descargar resumen</button>
+</div>
+</div>
 <table class="t" id="tComp">
 <thead id="tCompHead"></thead>
 <tbody id="tCompBody"></tbody>
