@@ -1399,8 +1399,8 @@ function renderChoferes() {
               function emitCfbcSub() {
                   if (currentGroup !== null) {
                       var iconsHtml = '<div style="display:inline-flex; align-items:center; float:left; padding-left:10px; gap:8px;">';
-                      if (curFactura) iconsHtml += '<img src="'+curFactura+'" onclick="openImageViewer(this.src)" style="height:25px; width:25px; object-fit:cover; border-radius:4px; cursor:pointer; border:1px solid #ccc; box-shadow:0 2px 4px rgba(0,0,0,0.1);" title="Ver Factura">';
-                      if (curAcuse) iconsHtml += '<img src="'+curAcuse+'" onclick="openImageViewer(this.src)" style="height:25px; width:25px; object-fit:cover; border-radius:4px; cursor:pointer; border:1px solid #ccc; box-shadow:0 2px 4px rgba(0,0,0,0.1);" title="Ver Acuse">';
+                      if (curFactura) iconsHtml += window.WalmexDocumentLinks.buildDocumentLink(curFactura, 'Factura', 'fa-file-invoice');
+                      if (curAcuse) iconsHtml += window.WalmexDocumentLinks.buildDocumentLink(curAcuse, 'Acuse', 'fa-file-circle-check');
                       if (curRazon && !curAcuse) iconsHtml += '<span style="color:#d97706; font-size:12px; cursor:help; vertical-align:middle; display:flex; align-items:center; gap:4px;" title="Sin Folio: '+curRazon+'">⚠️ Sin Folio</span>';
                       iconsHtml += '</div>';
 
