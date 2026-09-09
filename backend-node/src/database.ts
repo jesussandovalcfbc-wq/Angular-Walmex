@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Pool, types } from 'pg';
+import { correctionNote, isInvoiceCorrection } from './invoice-corrections';
 
 types.setTypeParser(1700, (value) => Number(value));
 
@@ -18,7 +19,7 @@ const TABLE_COLUMNS: Record<string, Set<string>> = {
   devoluciones: new Set([
     'id', 'created_at', 'folio', 'serie', 'producto', 'cantidad_devuelta',
     'precio_unidad', 'total_devolucion', 'razon_devolucion', 'verificado',
-    'verificado_at'
+    'verificado_at', 'modificada', 'modificada_at', 'modificacion_razon'
   ]),
   walmex_resumen_captura: new Set(['id', 'data', 'updated_at']),
   walmex_resumen_captura_v2: new Set([
@@ -121,7 +122,10 @@ async function ensureDevolucionesVerificationSchema(): Promise<void> {
     devolucionesVerificationSchema = pool.query(
       `ALTER TABLE devoluciones
          ADD COLUMN IF NOT EXISTS verificado BOOLEAN NOT NULL DEFAULT FALSE,
-         ADD COLUMN IF NOT EXISTS verificado_at TIMESTAMPTZ`
+         ADD COLUMN IF NOT EXISTS verificado_at TIMESTAMPTZ,
+         ADD COLUMN IF NOT EXISTS modificada BOOLEAN NOT NULL DEFAULT FALSE,
+         ADD COLUMN IF NOT EXISTS modificada_at TIMESTAMPTZ,
+         ADD COLUMN IF NOT EXISTS modificacion_razon TEXT`
     ).then(() => undefined).catch((error) => {
       devolucionesVerificationSchema = null;
       throw error;
@@ -172,8 +176,10 @@ type InvoiceItemUpdate = {
 export async function updateInvoice(
   folio: string,
   items: InvoiceItemUpdate[],
-  reason: string
+  reason: string,
+  correction = false
 ): Promise<any[]> {
+  await ensureDevolucionesVerificationSchema();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -205,10 +211,35 @@ export async function updateInvoice(
     for (const item of normalized) {
       const oldUnits = Number(item.row.unidades || 0);
       const unitPrice = Number(item.row.precio_unidad || 0);
+      let previouslyReturnedUnits = 0;
+      if (correction && item.unidades > oldUnits) {
+        const previousReturns = await client.query(
+          `SELECT COALESCE(SUM(cantidad_devuelta), 0) AS total
+             FROM devoluciones
+            WHERE folio = $1
+              AND producto = $2
+              AND COALESCE(modificada, FALSE) = FALSE`,
+          [folio, item.row.producto]
+        );
+        previouslyReturnedUnits = Number(previousReturns.rows[0]?.total || 0);
+      }
       await client.query(
         'UPDATE facturas_folios SET unidades = $1, venta_total = $2 WHERE id = $3 AND folio = $4',
         [item.unidades, item.unidades * unitPrice, item.id, folio]
       );
+      if (isInvoiceCorrection(oldUnits, item.unidades, previouslyReturnedUnits)) {
+        const note = correctionNote(folio, item.row.producto, oldUnits, item.unidades);
+        await client.query(
+          `UPDATE devoluciones
+              SET modificada = TRUE,
+                  modificada_at = NOW(),
+                  modificacion_razon = $1
+            WHERE folio = $2
+              AND producto = $3
+              AND COALESCE(modificada, FALSE) = FALSE`,
+          [note, folio, item.row.producto]
+        );
+      }
       const returned = oldUnits - item.unidades;
       if (returned > 0) {
         await client.query(

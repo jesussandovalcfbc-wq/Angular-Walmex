@@ -408,7 +408,7 @@
 </div><!-- end subPanelConsolidado -->
 <div *ngIf="invoiceEditorOpen" class="invoice-modal-backdrop" (click)="closeInvoiceEditor()">
   <section class="invoice-modal" role="dialog" aria-modal="true" aria-labelledby="invoiceModalTitle" (click)="$event.stopPropagation()">
-    <header class="invoice-modal-header">
+    <div class="invoice-modal-header">
       <div>
         <div class="invoice-modal-kicker">FACTURA {{ editingInvoice?.folio }}</div>
         <h3 id="invoiceModalTitle">Modificar factura</h3>
@@ -417,7 +417,7 @@
       <button type="button" class="btn-close invoice-close-btn" aria-label="Cerrar" (click)="closeInvoiceEditor()" [disabled]="invoiceSaving">
         <i class="fa-solid fa-xmark" aria-hidden="true"></i>
       </button>
-    </header>
+    </div>
 
     <div class="invoice-modal-body">
       <div class="table-responsive invoice-edit-table-wrap">
@@ -427,6 +427,7 @@
               <th>Producto</th>
               <th class="text-end">Precio unitario</th>
               <th class="text-center">Unidades actuales</th>
+              <th class="text-center">Devolución</th>
               <th class="text-center">Nuevas unidades</th>
               <th class="text-end">Nuevo total</th>
             </tr>
@@ -436,6 +437,7 @@
               <td>{{ item.producto }}</td>
               <td class="text-end">{{ item.precio | currency:'USD':'symbol':'1.2-2' }}</td>
               <td class="text-center">{{ item.originalUnits }}</td>
+              <td class="text-center fw-semibold text-danger">{{ item.returnedUnits || 0 }}</td>
               <td class="text-center">
                 <input class="form-control form-control-sm invoice-units-input" type="number" min="0" step="1"
                   [(ngModel)]="item.unidades" [disabled]="invoiceSaving" [attr.aria-label]="'Nuevas unidades de ' + item.producto" />
@@ -445,7 +447,7 @@
           </tbody>
           <tfoot>
             <tr>
-              <th colspan="4" class="text-end">Total de factura</th>
+              <th colspan="5" class="text-end">Total de factura</th>
               <th class="text-end">{{ invoiceTotal() | currency:'USD':'symbol':'1.2-2' }}</th>
             </tr>
           </tfoot>
@@ -464,13 +466,17 @@
       </div>
     </div>
 
-    <footer class="invoice-modal-footer">
+    <div class="invoice-modal-footer">
       <button type="button" class="btn btn-outline-secondary btn-sm" (click)="closeInvoiceEditor()" [disabled]="invoiceSaving">Cerrar</button>
-      <button type="button" class="btn btn-primary btn-sm" (click)="saveInvoiceChanges()" [disabled]="invoiceSaving">
+      <button *ngIf="invoiceHasReturn()" type="button" class="btn btn-sm invoice-correction-btn" (click)="applyInvoiceCorrection()" [disabled]="invoiceSaving || !invoiceHasCorrection()" [title]="invoiceHasCorrection() ? 'Aplicar corrección' : 'Cambia Nuevas unidades para habilitar la corrección'">
+        <i class="fa-solid" [ngClass]="invoiceSaving ? 'fa-spinner fa-spin' : 'fa-rotate-left'" aria-hidden="true"></i>
+        {{ invoiceSaving ? 'Aplicando...' : 'Aplicar corrección' }}
+      </button>
+      <button type="button" class="btn btn-primary btn-sm" (click)="saveInvoiceChanges()" [disabled]="invoiceSaving || invoiceHasCorrection()">
         <i class="fa-solid" [ngClass]="invoiceSaving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'" aria-hidden="true"></i>
         {{ invoiceSaving ? 'Guardando...' : 'Guardar cambios' }}
       </button>
-    </footer>
+    </div>
   </section>
 </div>
 <!-- Sub-panel Devoluciones -->

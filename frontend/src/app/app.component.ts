@@ -313,11 +313,23 @@ export class AppComponent implements AfterViewInit, OnDestroy {
         producto: row.producto || '',
         precio: Number(row.precio_unidad || 0),
         originalUnits: Number(row.unidades || 0),
-        unidades: Number(row.unidades || 0)
+        unidades: Number(row.unidades || 0),
+        returnedUnits: this.getReturnedUnits(folio, row.producto || '')
       }))
     };
     this.invoiceActionMessage = '';
     this.invoiceEditorOpen = true;
+  }
+
+  private getReturnedUnits(folio: string, producto: string): number {
+    const helper = (window as any).WalmexInvoiceDevolutions;
+    return helper ? Number(helper.getReturnedUnits(this.devolucionesData, folio, producto) || 0) : 0;
+  }
+
+  invoicePendingReturn(item: any): number {
+    const helper = (window as any).WalmexInvoiceDevolutions;
+    if (helper) return Number(helper.getPendingReturnUnits(item?.originalUnits, item?.unidades) || 0);
+    return Math.max(0, Number(item?.originalUnits || 0) - Number(item?.unidades || 0));
   }
 
   closeInvoiceEditor() {
@@ -330,6 +342,18 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   invoiceHasReduction(): boolean {
     return !!this.editingInvoice?.items?.some(
       (item: any) => Number(item.unidades) < Number(item.originalUnits)
+    );
+  }
+
+  invoiceHasReturn(): boolean {
+    return !!this.editingInvoice?.items?.some(
+      (item: any) => Number(item.returnedUnits || 0) > 0
+    );
+  }
+
+  invoiceHasCorrection(): boolean {
+    return !!this.editingInvoice?.items?.some(
+      (item: any) => Number(item.unidades) > Number(item.originalUnits) && Number(item.returnedUnits || 0) > 0
     );
   }
 
@@ -364,6 +388,48 @@ export class AppComponent implements AfterViewInit, OnDestroy {
       error: (err) => {
         this.invoiceSaving = false;
         this.invoiceActionMessage = err.error?.error || err.message || 'No se pudo modificar la factura.';
+      }
+    });
+  }
+
+  applyInvoiceCorrection() {
+    if (!this.editingInvoice || this.invoiceSaving || !this.invoiceHasCorrection()) return;
+    const invalid = this.editingInvoice.items.some(
+      (item: any) => !Number.isInteger(Number(item.unidades)) || Number(item.unidades) < 0
+    );
+    if (invalid) {
+      this.invoiceActionMessage = 'Las unidades deben ser numeros enteros iguales o mayores a cero.';
+      return;
+    }
+    if (this.invoiceHasReduction() && !String(this.editingInvoice.reason || '').trim()) {
+      this.invoiceActionMessage = 'Escribe el motivo de la reduccion para aplicar ambos cambios.';
+      return;
+    }
+
+    const affected = this.editingInvoice.items
+      .filter((item: any) => Number(item.unidades) > Number(item.originalUnits) && Number(item.returnedUnits || 0) > 0)
+      .map((item: any) => `${item.producto}: ${item.originalUnits} a ${item.unidades}`)
+      .join('\n');
+    const accepted = confirm(
+      'Se aplicara una correccion en Neon.\n\n' +
+      affected + '\n\n' +
+      'La devolucion original se conservara en el historial y se marcara en morado como Modificada.\n\n' +
+      '¿Continuar?'
+    );
+    if (!accepted) return;
+
+    this.invoiceSaving = true;
+    this.invoiceActionMessage = '';
+    const folio = encodeURIComponent(this.editingInvoice.folio);
+    this.http.patch(`${this.apiUrl}/facturas/${folio}`, {
+      items: this.editingInvoice.items.map((item: any) => ({ id: item.id, unidades: Number(item.unidades) })),
+      reason: String(this.editingInvoice.reason || '').trim(),
+      correction: true
+    }).subscribe({
+      next: () => this.refreshInvoiceData('Correccion aplicada. La devolucion anterior quedo marcada como modificada.'),
+      error: (err) => {
+        this.invoiceSaving = false;
+        this.invoiceActionMessage = err.error?.error || err.message || 'No se pudo aplicar la correccion.';
       }
     });
   }

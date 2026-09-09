@@ -544,10 +544,14 @@ function renderDevoluciones() {
         var devolucionId = Number(r.id || 0);
         var rowId = 'dev_row_' + devolucionId;
         var isVerified = r.verificado === true || r.verificado === 'true';
-        var rowClass = isVerified ? 'dev-row-green' : 'dev-row-red';
+        var isModified = r.modificada === true || r.modificada === 'true';
+        var rowClass = isModified ? 'dev-row-purple' : (isVerified ? 'dev-row-green' : 'dev-row-red');
         var badgeColor = isVerified ? '#198754' : '#dc3545';
         var badgeIcon = isVerified ? 'fa-check' : 'fa-xmark';
         var badgeText = isVerified ? 'Verificado' : 'No verificado';
+        var modifiedBadge = isModified
+          ? '<span class="dev-modified-badge" title="'+(r.modificacion_razon || 'Devolucion modificada')+'">Modificada</span>'
+          : '';
         
           var fFactura = '-';
           if (typeof DATABASE_DATA !== 'undefined' && Array.isArray(DATABASE_DATA)) {
@@ -565,7 +569,7 @@ rows += '<tr id="'+rowId+'" data-devolucion-id="'+devolucionId+'" class="'+rowCl
             '<td class="text-end">'+cant.toLocaleString('en-US')+'</td>' +
             '<td class="text-end">$'+precio.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>' +
             '<td class="text-end">$'+total.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>' +
-            '<td class="text-center fst-italic">'+(r.razon_devolucion || '-')+'</td>' +
+            '<td class="text-center fst-italic">'+modifiedBadge+(r.razon_devolucion || '-')+'</td>' +
             '<td class="text-center"><div id="badge_'+rowId+'" data-verified="'+isVerified+'" class="dev-verify-badge" onclick="if(typeof window.toggleDevVerified===\'function\') window.toggleDevVerified(\''+rowId+'\')" style="display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:4px; font-size:11px; font-weight:600; cursor:pointer; background:'+badgeColor+'; color:#fff; border:none; transition:all 0.2s; user-select:none;"><i class="fa-solid '+badgeIcon+'"></i> '+badgeText+'</div></td>' +
             '</tr>';
     });
