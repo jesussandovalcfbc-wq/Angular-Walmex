@@ -2341,7 +2341,7 @@ function renderGasto(){
 }
 
 function renderGasolina(){
-  var sems      = getSemanasActivas();
+  var sems      = (DATA.gasolina_semanas && DATA.gasolina_semanas.length) ? DATA.gasolina_semanas : getSemanasActivas();
   var gData     = DATA.gasolina_por_vehiculo || {};
   var vehiculos = DATA.vehiculos_gasolina    || [];
   var gOtros    = DATA.gastos_otros          || {};
