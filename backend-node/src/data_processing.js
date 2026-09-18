@@ -111,10 +111,18 @@ async function cargarGasolina() {
         const semanasSet = new Set();
         for (let i = 3; i < rows.length; i++) {
             const row = rows[i];
-            if (!row || row.length <= Math.max(COL_FECHA, COL_TOTAL, COL_VEH))
+            if (!row || row.length <= Math.max(COL_FECHA, COL_TOTAL))
                 continue;
-            const vehiculo = String(row[COL_VEH] || '').trim();
-            if (!VEHICULOS_GASOLINA.includes(vehiculo))
+            // Búsqueda inteligente: buscar en toda la fila si contiene el nombre del vehículo
+            let vehiculo = '';
+            for (let c = 0; c < row.length; c++) {
+                const val = String(row[c] || '').trim();
+                if (VEHICULOS_GASOLINA.includes(val)) {
+                    vehiculo = val;
+                    break;
+                }
+            }
+            if (!vehiculo)
                 continue;
             const date = parseExcelDate(row[COL_FECHA]);
             if (!date)
