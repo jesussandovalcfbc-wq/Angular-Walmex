@@ -20,12 +20,34 @@ const NOMINA_SHARED_LINK = "https://pacificafarms-my.sharepoint.com/:x:/g/person
 
 function parseExcelDate(v: any): Date | null {
   if (v instanceof Date) return v;
+  let d: Date | null = null;
+  
   if (typeof v === 'number' && v > 0) {
-    return new Date((v - 25569) * 86400 * 1000 + new Date().getTimezoneOffset() * 60000);
+    d = new Date((v - 25569) * 86400 * 1000 + new Date().getTimezoneOffset() * 60000);
+  } else if (typeof v === 'string') {
+    const match = v.trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::\d{2})?)?/);
+    if (match) {
+        const p1 = Number(match[1]);
+        const p2 = Number(match[2]);
+        let year = Number(match[3]);
+        if (year < 100) year += 2000;
+        
+        if (p1 <= 31 && p2 <= 12) {
+            d = new Date(year, p2 - 1, p1);
+        }
+    }
+    if (!d) {
+        const parsed = new Date(v);
+        if (!isNaN(parsed.getTime())) d = parsed;
+    }
   }
-  if (typeof v === 'string') {
-    const d = new Date(v);
-    if (!isNaN(d.getTime())) return d;
+  
+  if (d && !isNaN(d.getTime())) {
+      // Heurística para fechas de agosto que Excel volteó (ej. 10/8 parseado como 8 de oct)
+      if (d.getFullYear() === 2026 && d.getDate() === 8 && d.getMonth() >= 8 && d.getMonth() <= 11) {
+          d = new Date(d.getFullYear(), 7, d.getMonth() + 1, d.getHours(), d.getMinutes());
+      }
+      return d;
   }
   return null;
 }
