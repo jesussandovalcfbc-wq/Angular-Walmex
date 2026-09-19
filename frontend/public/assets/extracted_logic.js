@@ -2341,7 +2341,10 @@ function renderGasto(){
 }
 
 function renderGasolina(){
-  var sems      = (DATA.gasolina_semanas && DATA.gasolina_semanas.length) ? DATA.gasolina_semanas : getSemanasActivas();
+  // La tabla debe respetar el mismo filtro global de semanas que el resto de
+  // la vista Gasto. Cuando no hay selección, getSemanasActivas() devuelve
+  // todas las semanas disponibles del tablero.
+  var sems      = getSemanasActivas();
   var gData     = DATA.gasolina_por_vehiculo || {};
   var vehiculos = DATA.vehiculos_gasolina    || [];
   var gOtros    = DATA.gastos_otros          || {};
