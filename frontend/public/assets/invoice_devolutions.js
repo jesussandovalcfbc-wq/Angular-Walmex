@@ -14,7 +14,7 @@
     var wantedProduct = normalize(producto);
 
     return (Array.isArray(rows) ? rows : []).reduce(function (total, row) {
-      if (normalize(row && row.folio) !== wantedFolio || normalize(row && row.producto) !== wantedProduct || row && (row.modificada === true || row.modificada === 'true')) {
+      if (normalize(row && row.folio) !== wantedFolio || normalize(row && row.producto) !== wantedProduct || row && (row.modificada === true || row.modificada === 'true' || row.reemplazada === true || row.reemplazada === 'true')) {
         return total;
       }
       var quantity = Number(row && row.cantidad_devuelta);

@@ -520,7 +520,9 @@ function renderMermas() {
 function renderDevoluciones() {
     var tbody = document.getElementById('devolucionesTbody');
     if (!tbody) return;
-    var data = DEVOLUCIONES_DATA || [];
+    var data = (DEVOLUCIONES_DATA || []).filter(function(r) {
+        return !(r && (r.reemplazada === true || r.reemplazada === 'true'));
+    });
     var desde   = (document.getElementById('devDesde')   || {}).value || '';
     var hasta   = (document.getElementById('devHasta')   || {}).value || '';
     var folio   = ((document.getElementById('devFolioFilter')   || {}).value || '').toLowerCase().trim();

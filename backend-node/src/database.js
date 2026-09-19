@@ -36,7 +36,8 @@ const TABLE_COLUMNS = {
     devoluciones: new Set([
         'id', 'created_at', 'folio', 'serie', 'producto', 'cantidad_devuelta',
         'precio_unidad', 'total_devolucion', 'razon_devolucion', 'verificado',
-        'verificado_at', 'modificada', 'modificada_at', 'modificacion_razon'
+        'verificado_at', 'modificada', 'modificada_at', 'modificacion_razon',
+        'reemplazada', 'reemplazada_at', 'reemplazada_razon'
     ]),
     walmex_resumen_captura: new Set(['id', 'data', 'updated_at']),
     walmex_resumen_captura_v2: new Set([
@@ -126,7 +127,10 @@ async function ensureDevolucionesVerificationSchema() {
          ADD COLUMN IF NOT EXISTS verificado_at TIMESTAMPTZ,
          ADD COLUMN IF NOT EXISTS modificada BOOLEAN NOT NULL DEFAULT FALSE,
          ADD COLUMN IF NOT EXISTS modificada_at TIMESTAMPTZ,
-         ADD COLUMN IF NOT EXISTS modificacion_razon TEXT`).then(() => undefined).catch((error) => {
+         ADD COLUMN IF NOT EXISTS modificacion_razon TEXT,
+         ADD COLUMN IF NOT EXISTS reemplazada BOOLEAN NOT NULL DEFAULT FALSE,
+         ADD COLUMN IF NOT EXISTS reemplazada_at TIMESTAMPTZ,
+         ADD COLUMN IF NOT EXISTS reemplazada_razon TEXT`).then(() => undefined).catch((error) => {
             devolucionesVerificationSchema = null;
             throw error;
         });
@@ -135,7 +139,7 @@ async function ensureDevolucionesVerificationSchema() {
 }
 async function getDevolucionesData() {
     await ensureDevolucionesVerificationSchema();
-    const result = await exports.pool.query('SELECT * FROM devoluciones ORDER BY created_at DESC');
+    const result = await exports.pool.query('SELECT * FROM devoluciones WHERE COALESCE(reemplazada, FALSE) = FALSE ORDER BY created_at DESC');
     return result.rows;
 }
 async function setDevolucionVerification(id, verified) {
@@ -144,6 +148,7 @@ async function setDevolucionVerification(id, verified) {
         SET verificado = $1,
             verificado_at = CASE WHEN $1 THEN NOW() ELSE NULL END
       WHERE id = $2
+        AND COALESCE(reemplazada, FALSE) = FALSE
       RETURNING *`, [verified, id]);
     if (!result.rows.length)
         throw new Error('La devolucion ya no existe.');
@@ -157,6 +162,7 @@ async function setDevolucionesVerification(ids, verified) {
         SET verificado = $1,
             verificado_at = CASE WHEN $1 THEN NOW() ELSE NULL END
       WHERE id = ANY($2::bigint[])
+        AND COALESCE(reemplazada, FALSE) = FALSE
       RETURNING *`, [verified, ids]);
     return result.rows;
 }
@@ -195,7 +201,8 @@ async function updateInvoice(folio, items, reason, correction = false) {
              FROM devoluciones
             WHERE folio = $1
               AND producto = $2
-              AND COALESCE(modificada, FALSE) = FALSE`, [folio, item.row.producto]);
+             AND COALESCE(modificada, FALSE) = FALSE
+             AND COALESCE(reemplazada, FALSE) = FALSE`, [folio, item.row.producto]);
                 previouslyReturnedUnits = Number(previousReturns.rows[0]?.total || 0);
             }
             await client.query('UPDATE facturas_folios SET unidades = $1, venta_total = $2 WHERE id = $3 AND folio = $4', [item.unidades, item.unidades * unitPrice, item.id, folio]);
@@ -207,7 +214,8 @@ async function updateInvoice(folio, items, reason, correction = false) {
                   modificacion_razon = $1
             WHERE folio = $2
               AND producto = $3
-              AND COALESCE(modificada, FALSE) = FALSE`, [note, folio, item.row.producto]);
+              AND COALESCE(modificada, FALSE) = FALSE
+              AND COALESCE(reemplazada, FALSE) = FALSE`, [note, folio, item.row.producto]);
             }
             const returned = oldUnits - item.unidades;
             if (returned > 0) {
