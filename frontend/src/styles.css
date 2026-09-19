@@ -2212,3 +2212,38 @@ tr.dev-row-purple td { color: #000 !important; font-weight: normal !important; }
   z-index: 2;
 }
 
+/* El diálogo de autorización sólo requiere una contraseña: compacto y legible. */
+.invoice-password-modal {
+  width: min(420px, 94vw);
+}
+.invoice-password-modal .invoice-modal-body {
+  padding: 18px 20px 20px;
+  overflow: visible;
+}
+.invoice-password-modal .form-label {
+  display: block;
+  margin-bottom: 7px;
+  color: #173b60;
+  font-size: 12px;
+  font-weight: 700;
+}
+.invoice-password-modal #invoicePassword {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  height: 40px;
+  padding: 8px 10px;
+  color: #172b4d;
+  background: #fff;
+  border: 2px solid #6f99c3;
+  border-radius: 5px;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, .08);
+  font-size: 14px;
+}
+.invoice-password-modal #invoicePassword::placeholder { color: #6b7e91; opacity: 1; }
+.invoice-password-modal #invoicePassword:focus {
+  border-color: #0d6efd;
+  outline: 3px solid rgba(13, 110, 253, .18);
+  box-shadow: none;
+}
+

@@ -30,6 +30,11 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   invoiceSaving = false;
   invoiceActionMessage = '';
   editingInvoice: any = null;
+  passwordDialogOpen = false;
+  passwordDialogAction: 'modificar' | 'cancelar' | null = null;
+  passwordDialogFolio = '';
+  passwordValue = '';
+  passwordError = '';
   private dashboardData: any = null;
   private facturasData: any[] = [];
   private devolucionesData: any[] = [];
@@ -298,7 +303,39 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   //   }
   // }
 
+  private requestInvoiceAuthorization(action: 'modificar' | 'cancelar', folio: string) {
+    this.passwordDialogAction = action;
+    this.passwordDialogFolio = folio;
+    this.passwordValue = '';
+    this.passwordError = '';
+    this.passwordDialogOpen = true;
+  }
+
   openInvoiceEditor(folio: string) {
+    this.requestInvoiceAuthorization('modificar', folio);
+  }
+
+  submitInvoiceAuthorization() {
+    if (this.passwordValue !== 'cfbc2026') {
+      this.passwordError = 'Contraseña incorrecta.';
+      return;
+    }
+    const action = this.passwordDialogAction;
+    const folio = this.passwordDialogFolio;
+    this.closePasswordDialog();
+    if (action === 'modificar') this.openInvoiceEditorAuthorized(folio);
+    if (action === 'cancelar') this.cancelInvoiceAuthorized(folio);
+  }
+
+  closePasswordDialog() {
+    this.passwordDialogOpen = false;
+    this.passwordDialogAction = null;
+    this.passwordDialogFolio = '';
+    this.passwordValue = '';
+    this.passwordError = '';
+  }
+
+  private openInvoiceEditorAuthorized(folio: string) {
     const rows = this.facturasData.filter((row) => String(row.folio ?? '') === String(folio));
     if (!rows.length) {
       alert('La factura ya no esta disponible. Actualiza la pagina e intenta nuevamente.');
@@ -435,6 +472,10 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   }
 
   cancelInvoice(folio: string) {
+    this.requestInvoiceAuthorization('cancelar', folio);
+  }
+
+  private cancelInvoiceAuthorized(folio: string) {
     const rows = this.facturasData.filter((row) => String(row.folio ?? '') === String(folio));
     if (!rows.length) {
       alert('La factura ya no esta disponible.');

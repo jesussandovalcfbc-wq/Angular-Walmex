@@ -122,10 +122,11 @@ app.patch('/api/facturas/:folio', async (req, res) => {
         const folio = String(req.params.folio || '').trim();
         const items = Array.isArray(req.body?.items) ? req.body.items : [];
         const reason = typeof req.body?.reason === 'string' ? req.body.reason : '';
+        const correction = req.body?.correction === true;
         if (!folio || !items.length)
             return res.status(400).json({ error: 'Factura o productos invalidos.' });
-        const rows = await (0, database_1.updateInvoice)(folio, items, reason);
-        res.json({ message: 'Factura modificada correctamente.', rows });
+        const rows = await (0, database_1.updateInvoice)(folio, items, reason, correction);
+        res.json({ message: correction ? 'Correccion aplicada correctamente.' : 'Factura modificada correctamente.', rows });
     }
     catch (error) {
         console.error('[Modificar factura]', error.message);
