@@ -81,8 +81,11 @@ function parseExcelDate(v) {
         }
     }
     if (d && !isNaN(d.getTime())) {
-        // Heurística para fechas de agosto que Excel volteó (ej. 10/8 parseado como 8 de oct)
-        if (d.getFullYear() === 2026 && d.getDate() === 8 && d.getMonth() >= 8 && d.getMonth() <= 11) {
+        // Las fechas numéricas de Excel ya representan el día correcto. La
+        // heurística solo aplica a textos ISO que SharePoint haya intercambiado
+        // (ej. 10/8 parseado como 8 de octubre); aplicarla a seriales también
+        // convertía fechas reales de septiembre en agosto y rompía las semanas.
+        if (typeof v !== 'number' && d.getFullYear() === 2026 && d.getDate() === 8 && d.getMonth() >= 8 && d.getMonth() <= 11) {
             d = new Date(d.getFullYear(), 7, d.getMonth() + 1, d.getHours(), d.getMinutes());
         }
         return d;
@@ -462,6 +465,22 @@ async function cargarDatos(cacheKey = "") {
             rd.inventario += r.inventario;
         }
     }
+    // The SEM column in the source workbook follows ISO week numbering. Use
+    // that canonical value when assigning records from REPORTE-GASTOSAPP. The
+    // previous implementation inferred the week only from a Sunday-start map;
+    // because that map is built from many store rows, a duplicated or delayed
+    // date could overwrite the correct week (which made week 33 disappear).
+    const semanaDesdeFecha = (dateObj) => {
+        const iso = getISOWeekInfo(dateObj);
+        const isoKey = iso.year * 100 + iso.week;
+        if (semanas.includes(isoKey))
+            return isoKey;
+        // Keep a fallback for historical/non-ISO rows that may still exist in
+        // the workbook.
+        const wStart = new Date(dateObj);
+        wStart.setDate(wStart.getDate() - wStart.getDay());
+        return weekStartsToSemana[formatDateYMD(wStart)] || null;
+    };
     const data = {};
     for (const t of tiendas) {
         data[t] = {};
@@ -743,10 +762,7 @@ async function cargarDatos(cacheKey = "") {
                 continue;
             let semKey = null;
             if (dtObj) {
-                const wStart = new Date(dtObj);
-                wStart.setDate(wStart.getDate() - wStart.getDay());
-                const wStartStr = formatDateYMD(wStart);
-                semKey = weekStartsToSemana[wStartStr];
+                semKey = semanaDesdeFecha(dtObj);
             }
             if (!semKey)
                 continue;
@@ -839,9 +855,7 @@ async function cargarDatos(cacheKey = "") {
                 const categoria = normalizar(row[idxAppCategoria]);
                 if (!ruta || !categoria)
                     continue;
-                const wStart = new Date(fechaGasto);
-                wStart.setDate(wStart.getDate() - wStart.getDay());
-                const semKey = weekStartsToSemana[formatDateYMD(wStart)];
+                const semKey = semanaDesdeFecha(fechaGasto);
                 if (!semKey)
                     continue;
                 agregarGasto(ruta, categoria, semKey, monto);
