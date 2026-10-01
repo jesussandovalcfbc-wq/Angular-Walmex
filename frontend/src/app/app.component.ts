@@ -70,7 +70,8 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   onFilterChange(source: 'cfbc' | 'wm', field: 'desde' | 'hasta' | 'tienda' | 'producto' | 'estado') {
     const w = window as any;
 
-    // 1. Sincronizar variables de Angular para ambos lados
+    // 1. Sincronizar únicamente los filtros compartidos entre ambos lados.
+    // Producto permanece independiente para CFBC y Walmart.
     if (field === 'desde') {
       if (source === 'cfbc') this.wmDesdeDate = this.cfbcDesdeDate;
       else this.cfbcDesdeDate = this.wmDesdeDate;
@@ -82,10 +83,6 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     else if (field === 'tienda') {
       if (source === 'cfbc') this.wmTiendaSelected = this.cfbcTiendaSelected;
       else this.cfbcTiendaSelected = this.wmTiendaSelected;
-    }
-    else if (field === 'producto') {
-      if (source === 'cfbc') this.wmProductoSelected = this.cfbcProductoSelected;
-      else this.cfbcProductoSelected = this.wmProductoSelected;
     }
     else if (field === 'estado') {
       const selected = source === 'cfbc' ? this.cfbcEstadoSelected : this.wmEstadoSelected;
