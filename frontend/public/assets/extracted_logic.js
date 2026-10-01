@@ -1334,8 +1334,18 @@ function renderChoferes() {
             selCfbcTienda.add(new Option(t, t));
             if(selWmTienda) selWmTienda.add(new Option(t, t));
         });
+        var cfbcProductos = [];
+        if (Array.isArray(DATABASE_DATA)) {
+            DATABASE_DATA.forEach(function(row) {
+                var producto = String((row && row.producto) || '').trim();
+                if (producto && cfbcProductos.indexOf(producto) === -1) cfbcProductos.push(producto);
+            });
+        }
+        cfbcProductos.sort();
+        cfbcProductos.forEach(function(p) {
+            if (selCfbcProd) selCfbcProd.add(new Option(p, p));
+        });
         DATA.productos.forEach(function(p) {
-            selCfbcProd.add(new Option(p, p));
             if(selWmProd) selWmProd.add(new Option(p, p));
         });
     }

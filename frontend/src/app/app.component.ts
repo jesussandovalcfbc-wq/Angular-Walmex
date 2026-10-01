@@ -53,6 +53,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   wmEstadoSelected: string[] = ['ALL'];
 
   tiendaOptions: any[] = [{ label: 'Tienda (Todas)', value: 'ALL' }];
+  cfbcProductoOptions: any[] = [{ label: 'Producto (Todos)', value: 'ALL' }];
   productoOptions: any[] = [{ label: 'Producto (Todos)', value: 'ALL' }];
   estadoOptions: any[] = [
     { label: 'Todos', value: 'ALL' },
@@ -201,6 +202,16 @@ export class AppComponent implements AfterViewInit, OnDestroy {
         this.tiendaOptions = [
           { label: 'Tienda (Todas)', value: 'ALL' },
           ...w.DATA.tiendas.map((t: string) => ({ label: t, value: t }))
+        ];
+        const cfbcProductos: string[] = Array.isArray(w.DATABASE_DATA)
+          ? Array.from(new Set<string>(w.DATABASE_DATA
+              .map((row: any) => String(row?.producto || '').trim())
+              .filter((producto: string) => producto.length > 0)))
+              .sort((a: string, b: string) => a.localeCompare(b))
+          : [];
+        this.cfbcProductoOptions = [
+          { label: 'Producto (Todos)', value: 'ALL' },
+          ...cfbcProductos.map((p: string) => ({ label: p, value: p }))
         ];
         this.productoOptions = [
           { label: 'Producto (Todos)', value: 'ALL' },

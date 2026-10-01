@@ -301,7 +301,7 @@
         <p-dropdown [options]="tiendaOptions" [(ngModel)]="cfbcTiendaSelected" (ngModelChange)="onFilterChange('cfbc', 'tienda')" [filter]="true" filterBy="label" placeholder="Tienda (Todas)" appendTo="body" [style]="{'width': '145px'}" scrollHeight="600px" [panelStyle]="{'min-width': 'max-content'}" styleClass="text-xs"></p-dropdown>
     </div>
     <div class="flex items-center gap-1">
-        <p-dropdown [options]="productoOptions" [(ngModel)]="cfbcProductoSelected" (ngModelChange)="onFilterChange('cfbc', 'producto')" [filter]="true" filterBy="label" placeholder="Producto (Todos)" appendTo="body" [style]="{'width': '155px'}" scrollHeight="600px" [panelStyle]="{'min-width': 'max-content'}" styleClass="text-xs"></p-dropdown>
+        <p-dropdown [options]="cfbcProductoOptions" [(ngModel)]="cfbcProductoSelected" (ngModelChange)="onFilterChange('cfbc', 'producto')" [filter]="true" filterBy="label" placeholder="Producto (Todos)" appendTo="body" [style]="{'width': '155px'}" scrollHeight="600px" [panelStyle]="{'min-width': 'max-content'}" styleClass="text-xs"></p-dropdown>
     </div>
     <div class="flex items-center gap-1 flex-1">
         <p-multiSelect [options]="estadoOptions" [(ngModel)]="cfbcEstadoSelected" (ngModelChange)="onFilterChange('cfbc', 'estado')" defaultLabel="Estado (Todos)" [maxSelectedLabels]="1" appendTo="body" [style]="{'width': '145px'}" scrollHeight="600px" [panelStyle]="{'min-width': 'max-content'}" styleClass="text-xs"></p-multiSelect>
