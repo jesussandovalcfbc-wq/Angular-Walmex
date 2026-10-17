@@ -124,8 +124,7 @@ export async function downloadExcelSharepoint(): Promise<{ localPath: string, ca
   });
   if (!res.ok) throw new Error(`Error downloading excel: ${res.statusText}`);
   
-  const arrayBuffer = await res.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
+  const buffer = Buffer.from(await res.arrayBuffer());
   
   const tmpPath = path.join(os.tmpdir(), `walmex_${Date.now()}.xlsx`);
   fs.writeFileSync(tmpPath, buffer);
@@ -151,8 +150,7 @@ export async function downloadViaGraphSharedLink(sharedLink: string): Promise<Bu
   });
   if (!res.ok) throw new Error(`Error downloading via shared link: ${res.statusText}`);
   
-  const arrayBuffer = await res.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  return Buffer.from(await res.arrayBuffer());
 }
 
 type GraphErrorBody = {

@@ -140,8 +140,7 @@ async function downloadExcelSharepoint() {
     });
     if (!res.ok)
         throw new Error(`Error downloading excel: ${res.statusText}`);
-    const arrayBuffer = await res.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const buffer = Buffer.from(await res.arrayBuffer());
     const tmpPath = path.join(os.tmpdir(), `walmex_${Date.now()}.xlsx`);
     fs.writeFileSync(tmpPath, buffer);
     const cacheKey = crypto.createHash('md5').update(buffer).digest('hex').substring(0, 16);
@@ -162,8 +161,7 @@ async function downloadViaGraphSharedLink(sharedLink) {
     });
     if (!res.ok)
         throw new Error(`Error downloading via shared link: ${res.statusText}`);
-    const arrayBuffer = await res.arrayBuffer();
-    return Buffer.from(arrayBuffer);
+    return Buffer.from(await res.arrayBuffer());
 }
 async function graphRequest(url, options, timeoutMs) {
     const res = await fetch(url, {

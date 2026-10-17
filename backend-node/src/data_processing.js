@@ -121,14 +121,21 @@ function formatDateYMD(d) {
 async function cargarGasolina() {
     try {
         const buffer = await (0, sharepoint_1.downloadViaGraphSharedLink)(GASOLINA_SHARED_LINK);
-        const wb = XLSX.read(buffer, { type: 'buffer' });
+        const wb = XLSX.read(buffer, {
+            type: 'buffer',
+            dense: true,
+            cellHTML: false,
+            cellText: false,
+            cellStyles: false,
+            cellNF: false,
+        });
         const sheetName = wb.SheetNames.find(s => s.toLowerCase() === 'base datos') || wb.SheetNames[0];
         if (!sheetName)
             throw new Error('El archivo de gasolina no contiene hojas.');
         const ws = wb.Sheets[sheetName];
         if (!ws)
             throw new Error(`No se pudo leer la hoja ${sheetName}.`);
-        const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, blankrows: false });
         const COL_FECHA = 5, COL_TOTAL = 11, COL_VEH = 17;
         const resultado = {};
         VEHICULOS_GASOLINA.forEach(v => resultado[v] = {});
@@ -171,7 +178,14 @@ async function cargarGasolina() {
 async function cargarNomina() {
     try {
         const buffer = await (0, sharepoint_1.downloadViaGraphSharedLink)(NOMINA_SHARED_LINK);
-        const wb = XLSX.read(buffer, { type: 'buffer' });
+        const wb = XLSX.read(buffer, {
+            type: 'buffer',
+            sheetRows: 48,
+            cellHTML: false,
+            cellText: false,
+            cellStyles: false,
+            cellNF: false,
+        });
         const resultado = {};
         const semanasSet = new Set();
         for (const sname of wb.SheetNames) {
@@ -270,11 +284,25 @@ async function cargarDatos(cacheKey = "") {
         }
         catch (e) { }
     }
-    const wb = XLSX.readFile(localPath);
-    const ws = wb.Sheets['Data'];
+    const wb = XLSX.readFile(localPath, {
+        dense: true,
+        cellHTML: false,
+        cellText: false,
+        cellStyles: false,
+        cellNF: false,
+    });
+    // Keep only the sheets used by the dashboard before converting any of them
+    // to row arrays. Workbooks often contain historical/helper sheets that are
+    // expensive to keep alive during the aggregation step.
+    const sheetsUsed = new Set(['data', 'detalle', 'gastos', 'reporte-gastosapp']);
+    for (const sheetName of wb.SheetNames) {
+        if (!sheetsUsed.has(sheetName.trim().toLowerCase()))
+            delete wb.Sheets[sheetName];
+    }
+    let ws = wb.Sheets['Data'];
     if (!ws)
         throw new Error("No sheet 'Data'");
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    let rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, blankrows: false });
     const headers = (rows[0] || []).map(h => String(h || '').trim());
     const col = (name) => {
         const idx = headers.indexOf(name);
@@ -363,9 +391,48 @@ async function cargarDatos(cacheKey = "") {
             });
         }
     }
+    // The source worksheet and its row matrix are no longer needed after the
+    // compact records are built. Release both before creating the aggregates.
+    rows.length = 0;
+    delete wb.Sheets['Data'];
+    ws = undefined;
     const semanas = Array.from(new Set(records.map(r => r.semana))).sort((a, b) => a - b);
     const tiendas = Array.from(new Set(records.map(r => r.tienda))).sort();
     const productos = Array.from(new Set(records.map(r => r.producto))).sort();
+    const PRODUCTO_GASTO = {
+        'BQT ALSTROEMERI 8T': 15.00,
+        'BQT GIRASOL 6T': 10.00,
+        'BQT LILI ASIATIC 6T': 15.00,
+        'BQT MINI CLAVEL 8T': 15.00,
+        'BQT MIXTO 12T': 23.00,
+        'BQT MIXTO 15T': 23.00,
+        'BQT MIXTO 18 T': 10.00,
+        'BQT MIXTO 9T': 15.00,
+        'BQT ROSAS 12T': 20.00,
+        'BQT ROSAS 12T BAJA': 20.00,
+        'BQT ROSAS 6T': 15.00,
+        'BQT SNAPDRAGON 8T': 10.00,
+        'BQT ROSAS 6T BAJA': 10.00
+    };
+    const TIENDA_RUTA = {
+        'SC LOMAS DE SANTA FE': 'Rutas Playas',
+        'SC ENSENADA CENTRO': 'ENS',
+        'SC ENSENADA': 'ENS',
+        'SC ROSARITO': 'Rutas Playas',
+        'SC PLAYAS DE TIJUANA': 'Rutas Playas',
+        'SC MACROPLAZA INSURGENTES': 'Ruta 2000',
+        'SC DIAZ ORDAZ': 'Ruta 2000',
+        'SC TIJUANA HIPODROMO': 'Ruta 2000',
+        'SC PACIFICO': 'Rutas Playas',
+        'SC TIJUANA 2000': 'Ruta 2000',
+        'SC MEXICALI NOVENA': 'MXL 1',
+        'SC PLAZA SAN PEDRO': 'MXL 1',
+        'SC GALERIAS DEL VALLE': 'MXL 1',
+        'SC MEXICALI': 'MXL 1',
+        'SC TECATE GARITA': 'Ruta 2000',
+        'SC NUEVO MEXICALI': 'MXL 1'
+    };
+    const gastoData = {};
     const byStp = {};
     const fechaPorSemana = {};
     const totalesTienda = {};
@@ -464,7 +531,19 @@ async function cargarDatos(cacheKey = "") {
             rd.field1 += r.field1;
             rd.inventario += r.inventario;
         }
+        const ruta = TIENDA_RUTA[t];
+        const gasto = PRODUCTO_GASTO[p] || 0;
+        if (ruta && gasto > 0) {
+            if (!gastoData[ruta])
+                gastoData[ruta] = {};
+            if (!gastoData[ruta][sem])
+                gastoData[ruta][sem] = {};
+            gastoData[ruta][sem][p] = (gastoData[ruta][sem][p] || 0) + r.embarque_u;
+        }
     }
+    // Records are only an intermediate row representation. Release them before
+    // building the larger derived tables below.
+    records.length = 0;
     // The SEM column in the source workbook follows ISO week numbering. Use
     // that canonical value when assigning records from REPORTE-GASTOSAPP. The
     // previous implementation inferred the week only from a Sunday-start map;
@@ -558,51 +637,6 @@ async function cargarDatos(cacheKey = "") {
             }
         }
     }
-    const PRODUCTO_GASTO = {
-        'BQT ALSTROEMERI 8T': 15.00,
-        'BQT GIRASOL 6T': 10.00,
-        'BQT LILI ASIATIC 6T': 15.00,
-        'BQT MINI CLAVEL 8T': 15.00,
-        'BQT MIXTO 12T': 23.00,
-        'BQT MIXTO 15T': 23.00,
-        'BQT MIXTO 18 T': 10.00,
-        'BQT MIXTO 9T': 15.00,
-        'BQT ROSAS 12T': 20.00,
-        'BQT ROSAS 12T BAJA': 20.00,
-        'BQT ROSAS 6T': 15.00,
-        'BQT SNAPDRAGON 8T': 10.00,
-        'BQT ROSAS 6T BAJA': 10.00
-    };
-    const TIENDA_RUTA = {
-        'SC LOMAS DE SANTA FE': 'Rutas Playas',
-        'SC ENSENADA CENTRO': 'ENS',
-        'SC ENSENADA': 'ENS',
-        'SC ROSARITO': 'Rutas Playas',
-        'SC PLAYAS DE TIJUANA': 'Rutas Playas',
-        'SC MACROPLAZA INSURGENTES': 'Ruta 2000',
-        'SC DIAZ ORDAZ': 'Ruta 2000',
-        'SC TIJUANA HIPODROMO': 'Ruta 2000',
-        'SC PACIFICO': 'Rutas Playas',
-        'SC TIJUANA 2000': 'Ruta 2000',
-        'SC MEXICALI NOVENA': 'MXL 1',
-        'SC PLAZA SAN PEDRO': 'MXL 1',
-        'SC GALERIAS DEL VALLE': 'MXL 1',
-        'SC MEXICALI': 'MXL 1',
-        'SC TECATE GARITA': 'Ruta 2000',
-        'SC NUEVO MEXICALI': 'MXL 1'
-    };
-    const gastoData = {};
-    for (const r of records) {
-        const ruta = TIENDA_RUTA[r.tienda];
-        const gasto = PRODUCTO_GASTO[r.producto] || 0;
-        if (ruta && gasto > 0) {
-            if (!gastoData[ruta])
-                gastoData[ruta] = {};
-            if (!gastoData[ruta][r.semana])
-                gastoData[ruta][r.semana] = {};
-            gastoData[ruta][r.semana][r.producto] = (gastoData[ruta][r.semana][r.producto] || 0) + r.embarque_u;
-        }
-    }
     let wsDetalle = null;
     let wsGastos = null;
     let wsReporteGastosApp = null;
@@ -617,7 +651,7 @@ async function cargarDatos(cacheKey = "") {
     const detalleInventario = { fechas: [], fechas_por_semana: {}, fecha_to_semana: {}, data: {} };
     const detalleCuartoFrio = { fechas: [], data: {} };
     if (wsDetalle) {
-        const detRows = XLSX.utils.sheet_to_json(wsDetalle, { header: 1 });
+        const detRows = XLSX.utils.sheet_to_json(wsDetalle, { header: 1, raw: true, blankrows: false });
         const detHeaders = (detRows[0] || []).map(h => String(h || '').trim().toLowerCase());
         const idxTienda = detHeaders.indexOf('tienda');
         const idxFecha = detHeaders.indexOf('fecha');
@@ -709,6 +743,7 @@ async function cargarDatos(cacheKey = "") {
             detalleCuartoFrio.fechas = Array.from(cfFechasSet).sort();
             detalleCuartoFrio.data = cfData;
         }
+        detRows.length = 0;
         // --- Fin Extracción Cuarto Frío ---
     }
     const gastosOtros = {};
@@ -729,7 +764,7 @@ async function cargarDatos(cacheKey = "") {
         gastosOtros[ruta][concepto][semKey] = (gastosOtros[ruta][concepto][semKey] || 0) + monto;
     };
     if (wsGastos) {
-        const gasRows = XLSX.utils.sheet_to_json(wsGastos, { header: 1 });
+        const gasRows = XLSX.utils.sheet_to_json(wsGastos, { header: 1, raw: true, blankrows: false });
         const gasHeaders = (gasRows[0] || []).map(h => String(h || '').trim());
         const gastoCols = [];
         for (let i = 2; i < gasHeaders.length; i++) {
@@ -787,11 +822,12 @@ async function cargarDatos(cacheKey = "") {
                 }
             }
         }
+        gasRows.length = 0;
     }
     // Desde el 29 de junio de 2026, Otros Gastos se obtiene de REPORTE-GASTOSAPP.
     // Columnas utilizadas: Tienda, Fecha del Gasto, Categoria y Monto.
     if (wsReporteGastosApp) {
-        const appRows = XLSX.utils.sheet_to_json(wsReporteGastosApp, { header: 1 });
+        const appRows = XLSX.utils.sheet_to_json(wsReporteGastosApp, { header: 1, raw: true, blankrows: false });
         const normalizar = (value) => String(value || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
         const parseFechaGastoApp = (value) => {
             if (typeof value === 'number') {
@@ -864,7 +900,17 @@ async function cargarDatos(cacheKey = "") {
         else {
             console.warn('REPORTE-GASTOSAPP no contiene las columnas requeridas: Tienda, Fecha del Gasto, Categoria y Monto.');
         }
+        appRows.length = 0;
     }
+    // Drop the remaining worksheet objects before serializing the result. The
+    // workbook is only an intermediate parser structure and must not coexist
+    // with the complete dashboard payload during JSON.stringify.
+    wsDetalle = null;
+    wsGastos = null;
+    wsReporteGastosApp = null;
+    for (const sheetName of wb.SheetNames)
+        delete wb.Sheets[sheetName];
+    wb.SheetNames.length = 0;
     const resultDict = {
         _source_cache_key: cacheKey,
         _source_last_modified: sourceLastModified,
@@ -891,8 +937,9 @@ async function cargarDatos(cacheKey = "") {
         gastos_sc: gastosSc
     };
     try {
-        fs.writeFileSync(dataCacheFile, JSON.stringify(resultDict));
-        fs.writeFileSync(CACHE_LATEST, JSON.stringify(resultDict));
+        const serialized = JSON.stringify(resultDict);
+        fs.writeFileSync(dataCacheFile, serialized);
+        fs.writeFileSync(CACHE_LATEST, serialized);
     }
     catch (e) { }
     return resultDict;
