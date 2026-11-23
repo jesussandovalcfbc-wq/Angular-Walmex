@@ -3583,33 +3583,63 @@ window.duplicateLastProgrammedWeek = function() {
 
   var modeKey = _captureProjModeKey();
   var store = (window._captureProjections && window._captureProjections[modeKey]) || {};
-  var savedRows = [];
-  var latestWeek = null;
-  var latestNumber = -1;
+  var availableWeeks = {};
 
   Object.keys(store).forEach(function(sk) {
     var entry = store[sk];
     if (!entry || !Array.isArray(entry.rows)) return;
     entry.rows.forEach(function(row) {
       if (!row || !row.saved || String(row.sem || '').trim() === '') return;
-      var number = parseInt(String(row.sem).trim(), 10);
-      if (!Number.isFinite(number)) return;
-      if (number > latestNumber) {
-        latestNumber = number;
-        latestWeek = String(row.sem).trim();
-        savedRows = [];
-      }
-      if (number === latestNumber) savedRows.push({ key: sk, row: row });
+      availableWeeks[String(row.sem).trim()] = true;
     });
   });
 
-  if (!savedRows.length || latestWeek === null) {
+  var weeks = Object.keys(availableWeeks).sort(function(a, b) {
+    return (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0);
+  });
+  if (!weeks.length) {
     alert('No hay una semana programada para duplicar.');
     return;
   }
 
-  var nextWeek = String(latestNumber + 1);
-  if (!confirm('¿Duplicar la semana ' + latestWeek + ' como semana ' + nextWeek + '?')) return;
+  var defaultSourceWeek = weeks[weeks.length - 1];
+  var sourceInput = window.prompt(
+    '¿Qué semana quieres duplicar?\nSemanas disponibles: ' + weeks.join(', '),
+    defaultSourceWeek
+  );
+  if (sourceInput === null) return;
+  var sourceWeek = String(sourceInput).trim();
+  if (!sourceWeek || !availableWeeks[sourceWeek]) {
+    alert('La semana ' + sourceWeek + ' no tiene Programado guardado.');
+    return;
+  }
+
+  var sourceNumber = parseInt(sourceWeek, 10);
+  var defaultTargetWeek = Number.isFinite(sourceNumber) ? String(sourceNumber + 1) : '';
+  var targetInput = window.prompt('¿En qué semana quieres programarlo?', defaultTargetWeek);
+  if (targetInput === null) return;
+  var nextWeek = String(targetInput).trim();
+  if (!nextWeek || !Number.isFinite(parseInt(nextWeek, 10))) {
+    alert('La semana destino no es válida.');
+    return;
+  }
+
+  var savedRows = [];
+  Object.keys(store).forEach(function(sk) {
+    var entry = store[sk];
+    if (!entry || !Array.isArray(entry.rows)) return;
+    entry.rows.forEach(function(row) {
+      if (row && row.saved && String(row.sem || '').trim() === sourceWeek) {
+        savedRows.push({ key: sk, row: row });
+      }
+    });
+  });
+  if (!savedRows.length) {
+    alert('No se encontraron datos para la semana ' + sourceWeek + '.');
+    return;
+  }
+
+  if (!confirm('¿Duplicar la semana ' + sourceWeek + ' como semana ' + nextWeek + '?')) return;
 
   var duplicatedCount = 0;
   var skippedCount = 0;
@@ -3636,16 +3666,19 @@ window.duplicateLastProgrammedWeek = function() {
   });
 
   if (!duplicatedCount) {
-    alert('La semana ' + nextWeek + ' ya está programada para las combinaciones disponibles.');
+    alert('La semana ' + nextWeek + ' ya está programada para las combinaciones seleccionadas.');
     return;
   }
 
   try { localStorage.setItem(_CAPTURE_LS_KEY, JSON.stringify(window._captureProjections)); } catch (e) {}
-  window._nextSemanaProyeccion = latestNumber + 2;
-  window._captureNextSemanaSession = window._nextSemanaProyeccion;
+  var nextNumber = parseInt(nextWeek, 10);
+  if (Number.isFinite(nextNumber)) {
+    window._nextSemanaProyeccion = nextNumber + 1;
+    window._captureNextSemanaSession = window._nextSemanaProyeccion;
+  }
   window._skipCaptureSaveOnce = true;
   renderResumen();
-  alert('Se duplicaron ' + duplicatedCount + ' combinación(es) de la semana ' + latestWeek + ' a la semana ' + nextWeek + (skippedCount ? '. Algunas ya existían y se omitieron.' : '.'));
+  alert('Se duplicaron ' + duplicatedCount + ' combinación(es) de la semana ' + sourceWeek + ' a la semana ' + nextWeek + (skippedCount ? '. Algunas ya existían y se omitieron.' : '.'));
 };
 
 function _deleteRowFromNeon(mode, prod, tienda, sem) {
