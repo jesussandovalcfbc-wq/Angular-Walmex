@@ -3609,25 +3609,24 @@ window.duplicateLastProgrammedWeek = function() {
   }
 
   var nextWeek = String(latestNumber + 1);
-  var hasTarget = Object.keys(store).some(function(sk) {
-    var entry = store[sk];
-    return !!(entry && Array.isArray(entry.rows) && entry.rows.some(function(row) {
-      return row && row.saved && String(row.sem || '').trim() === nextWeek;
-    }));
-  });
-  if (hasTarget) {
-    alert('La semana ' + nextWeek + ' ya está programada.');
-    return;
-  }
-
   if (!confirm('¿Duplicar la semana ' + latestWeek + ' como semana ' + nextWeek + '?')) return;
 
+  var duplicatedCount = 0;
+  var skippedCount = 0;
   savedRows.forEach(function(item) {
     var entry = store[item.key];
     if (!entry) return;
     if (!Array.isArray(entry.rows)) entry.rows = [];
+    var alreadyExists = entry.rows.some(function(row) {
+      return row && row.saved && String(row.sem || '').trim() === nextWeek;
+    });
+    if (alreadyExists) {
+      skippedCount++;
+      return;
+    }
     var values = Array.isArray(item.row.values) ? item.row.values.slice() : [];
     entry.rows.push({ sem: nextWeek, values: values, hidden: false, saved: true });
+    duplicatedCount++;
 
     var separatorIndex = item.key.indexOf('\x00');
     if (separatorIndex === -1) return;
@@ -3636,11 +3635,17 @@ window.duplicateLastProgrammedWeek = function() {
     _saveRowToNeon(modeKey, producto, tienda, nextWeek, values);
   });
 
+  if (!duplicatedCount) {
+    alert('La semana ' + nextWeek + ' ya está programada para las combinaciones disponibles.');
+    return;
+  }
+
   try { localStorage.setItem(_CAPTURE_LS_KEY, JSON.stringify(window._captureProjections)); } catch (e) {}
   window._nextSemanaProyeccion = latestNumber + 2;
   window._captureNextSemanaSession = window._nextSemanaProyeccion;
   window._skipCaptureSaveOnce = true;
   renderResumen();
+  alert('Se duplicaron ' + duplicatedCount + ' combinación(es) de la semana ' + latestWeek + ' a la semana ' + nextWeek + (skippedCount ? '. Algunas ya existían y se omitieron.' : '.'));
 };
 
 function _deleteRowFromNeon(mode, prod, tienda, sem) {
