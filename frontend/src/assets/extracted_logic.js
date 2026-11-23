@@ -3575,6 +3575,74 @@ function _saveRowToNeon(mode, prod, tienda, sem, vals) {
   }).catch(function(e){ console.error(e); });
 }
 
+/* Duplica el último Programado guardado para facilitar la planeación de la
+   siguiente semana. La copia conserva producto, tienda y cantidades diarias,
+   pero se guarda con la semana siguiente como una fila nueva y editable. */
+window.duplicateLastProgrammedWeek = function() {
+  saveCaptureProjectionsFromDom();
+
+  var modeKey = _captureProjModeKey();
+  var store = (window._captureProjections && window._captureProjections[modeKey]) || {};
+  var savedRows = [];
+  var latestWeek = null;
+  var latestNumber = -1;
+
+  Object.keys(store).forEach(function(sk) {
+    var entry = store[sk];
+    if (!entry || !Array.isArray(entry.rows)) return;
+    entry.rows.forEach(function(row) {
+      if (!row || !row.saved || String(row.sem || '').trim() === '') return;
+      var number = parseInt(String(row.sem).trim(), 10);
+      if (!Number.isFinite(number)) return;
+      if (number > latestNumber) {
+        latestNumber = number;
+        latestWeek = String(row.sem).trim();
+        savedRows = [];
+      }
+      if (number === latestNumber) savedRows.push({ key: sk, row: row });
+    });
+  });
+
+  if (!savedRows.length || latestWeek === null) {
+    alert('No hay una semana programada para duplicar.');
+    return;
+  }
+
+  var nextWeek = String(latestNumber + 1);
+  var hasTarget = Object.keys(store).some(function(sk) {
+    var entry = store[sk];
+    return !!(entry && Array.isArray(entry.rows) && entry.rows.some(function(row) {
+      return row && row.saved && String(row.sem || '').trim() === nextWeek;
+    }));
+  });
+  if (hasTarget) {
+    alert('La semana ' + nextWeek + ' ya está programada.');
+    return;
+  }
+
+  if (!confirm('¿Duplicar la semana ' + latestWeek + ' como semana ' + nextWeek + '?')) return;
+
+  savedRows.forEach(function(item) {
+    var entry = store[item.key];
+    if (!entry) return;
+    if (!Array.isArray(entry.rows)) entry.rows = [];
+    var values = Array.isArray(item.row.values) ? item.row.values.slice() : [];
+    entry.rows.push({ sem: nextWeek, values: values, hidden: false, saved: true });
+
+    var separatorIndex = item.key.indexOf('\x00');
+    if (separatorIndex === -1) return;
+    var producto = item.key.slice(0, separatorIndex);
+    var tienda = item.key.slice(separatorIndex + 1);
+    _saveRowToNeon(modeKey, producto, tienda, nextWeek, values);
+  });
+
+  try { localStorage.setItem(_CAPTURE_LS_KEY, JSON.stringify(window._captureProjections)); } catch (e) {}
+  window._nextSemanaProyeccion = latestNumber + 2;
+  window._captureNextSemanaSession = window._nextSemanaProyeccion;
+  window._skipCaptureSaveOnce = true;
+  renderResumen();
+};
+
 function _deleteRowFromNeon(mode, prod, tienda, sem) {
   if (!_databaseConfigured()) return;
   var url = DATABASE_URL + '/rest/v1/' + DATABASE_CAPTURE_TABLE
