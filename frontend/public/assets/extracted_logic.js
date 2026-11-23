@@ -3575,6 +3575,112 @@ function _saveRowToNeon(mode, prod, tienda, sem, vals) {
   }).catch(function(e){ console.error(e); });
 }
 
+/* Duplica el último Programado guardado para facilitar la planeación de la
+   siguiente semana. La copia conserva producto, tienda y cantidades diarias,
+   pero se guarda con la semana siguiente como una fila nueva y editable. */
+window.duplicateLastProgrammedWeek = function() {
+  saveCaptureProjectionsFromDom();
+
+  var modeKey = _captureProjModeKey();
+  var store = (window._captureProjections && window._captureProjections[modeKey]) || {};
+  var availableWeeks = {};
+
+  Object.keys(store).forEach(function(sk) {
+    var entry = store[sk];
+    if (!entry || !Array.isArray(entry.rows)) return;
+    entry.rows.forEach(function(row) {
+      if (!row || !row.saved || String(row.sem || '').trim() === '') return;
+      availableWeeks[String(row.sem).trim()] = true;
+    });
+  });
+
+  var weeks = Object.keys(availableWeeks).sort(function(a, b) {
+    return (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0);
+  });
+  if (!weeks.length) {
+    alert('No hay una semana programada para duplicar.');
+    return;
+  }
+
+  var defaultSourceWeek = weeks[weeks.length - 1];
+  var sourceInput = window.prompt(
+    '¿Qué semana quieres duplicar?\nSemanas disponibles: ' + weeks.join(', '),
+    defaultSourceWeek
+  );
+  if (sourceInput === null) return;
+  var sourceWeek = String(sourceInput).trim();
+  if (!sourceWeek || !availableWeeks[sourceWeek]) {
+    alert('La semana ' + sourceWeek + ' no tiene Programado guardado.');
+    return;
+  }
+
+  var sourceNumber = parseInt(sourceWeek, 10);
+  var defaultTargetWeek = Number.isFinite(sourceNumber) ? String(sourceNumber + 1) : '';
+  var targetInput = window.prompt('¿En qué semana quieres programarlo?', defaultTargetWeek);
+  if (targetInput === null) return;
+  var nextWeek = String(targetInput).trim();
+  if (!nextWeek || !Number.isFinite(parseInt(nextWeek, 10))) {
+    alert('La semana destino no es válida.');
+    return;
+  }
+
+  var savedRows = [];
+  Object.keys(store).forEach(function(sk) {
+    var entry = store[sk];
+    if (!entry || !Array.isArray(entry.rows)) return;
+    entry.rows.forEach(function(row) {
+      if (row && row.saved && String(row.sem || '').trim() === sourceWeek) {
+        savedRows.push({ key: sk, row: row });
+      }
+    });
+  });
+  if (!savedRows.length) {
+    alert('No se encontraron datos para la semana ' + sourceWeek + '.');
+    return;
+  }
+
+  if (!confirm('¿Duplicar la semana ' + sourceWeek + ' como semana ' + nextWeek + '?')) return;
+
+  var duplicatedCount = 0;
+  var skippedCount = 0;
+  savedRows.forEach(function(item) {
+    var entry = store[item.key];
+    if (!entry) return;
+    if (!Array.isArray(entry.rows)) entry.rows = [];
+    var alreadyExists = entry.rows.some(function(row) {
+      return row && row.saved && String(row.sem || '').trim() === nextWeek;
+    });
+    if (alreadyExists) {
+      skippedCount++;
+      return;
+    }
+    var values = Array.isArray(item.row.values) ? item.row.values.slice() : [];
+    entry.rows.push({ sem: nextWeek, values: values, hidden: false, saved: true });
+    duplicatedCount++;
+
+    var separatorIndex = item.key.indexOf('\x00');
+    if (separatorIndex === -1) return;
+    var producto = item.key.slice(0, separatorIndex);
+    var tienda = item.key.slice(separatorIndex + 1);
+    _saveRowToNeon(modeKey, producto, tienda, nextWeek, values);
+  });
+
+  if (!duplicatedCount) {
+    alert('La semana ' + nextWeek + ' ya está programada para las combinaciones seleccionadas.');
+    return;
+  }
+
+  try { localStorage.setItem(_CAPTURE_LS_KEY, JSON.stringify(window._captureProjections)); } catch (e) {}
+  var nextNumber = parseInt(nextWeek, 10);
+  if (Number.isFinite(nextNumber)) {
+    window._nextSemanaProyeccion = nextNumber + 1;
+    window._captureNextSemanaSession = window._nextSemanaProyeccion;
+  }
+  window._skipCaptureSaveOnce = true;
+  renderResumen();
+  alert('Se duplicaron ' + duplicatedCount + ' combinación(es) de la semana ' + sourceWeek + ' a la semana ' + nextWeek + (skippedCount ? '. Algunas ya existían y se omitieron.' : '.'));
+};
+
 function _deleteRowFromNeon(mode, prod, tienda, sem) {
   if (!_databaseConfigured()) return;
   var url = DATABASE_URL + '/rest/v1/' + DATABASE_CAPTURE_TABLE
