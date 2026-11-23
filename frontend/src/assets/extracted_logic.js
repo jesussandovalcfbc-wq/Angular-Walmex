@@ -3643,23 +3643,6 @@ window.duplicateLastProgrammedWeek = function() {
   renderResumen();
 };
 
-window.toggleCaptureSemMenu = function(event) {
-  if (event) event.stopPropagation();
-  var menu = document.getElementById('captureSemMenu');
-  if (!menu) return;
-  menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
-};
-
-window.closeCaptureSemMenu = function() {
-  var menu = document.getElementById('captureSemMenu');
-  if (menu) menu.style.display = 'none';
-};
-
-document.addEventListener('click', function(event) {
-  var wrap = document.getElementById('captureSemMenuWrap');
-  if (wrap && !wrap.contains(event.target)) window.closeCaptureSemMenu();
-});
-
 function _deleteRowFromNeon(mode, prod, tienda, sem) {
   if (!_databaseConfigured()) return;
   var url = DATABASE_URL + '/rest/v1/' + DATABASE_CAPTURE_TABLE

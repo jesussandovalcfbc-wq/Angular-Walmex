@@ -1,4 +1,4 @@
-import { Component, AfterViewInit, ViewEncapsulation, OnDestroy } from '@angular/core';
+import { Component, AfterViewInit, ViewEncapsulation, OnDestroy, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterOutlet } from '@angular/router';
@@ -25,6 +25,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   selectedFile: File | null = null;
   uploadStatus: string = '';
   isChatOpen: boolean = false;
+  captureSemMenuOpen: boolean = false;
   isResumenTab: boolean = false;
   invoiceEditorOpen = false;
   invoiceSaving = false;
@@ -281,6 +282,34 @@ export class AppComponent implements AfterViewInit, OnDestroy {
 
   // ── Chat y archivo ────────────────────────────────────────────────────
   toggleChat() { this.isChatOpen = !this.isChatOpen; }
+
+  toggleCaptureSemMenu(event: Event) {
+    event.stopPropagation();
+    this.captureSemMenuOpen = !this.captureSemMenuOpen;
+  }
+
+  closeCaptureSemMenu() {
+    this.captureSemMenuOpen = false;
+  }
+
+  addCaptureWeek(event: Event) {
+    event.stopPropagation();
+    this.closeCaptureSemMenu();
+    const addCaptureRowAll = (window as any).addCaptureRowAll;
+    if (typeof addCaptureRowAll === 'function') addCaptureRowAll();
+  }
+
+  duplicateProgrammedWeek(event: Event) {
+    event.stopPropagation();
+    this.closeCaptureSemMenu();
+    const duplicate = (window as any).duplicateLastProgrammedWeek;
+    if (typeof duplicate === 'function') duplicate();
+  }
+
+  @HostListener('document:click')
+  onDocumentClick() {
+    this.closeCaptureSemMenu();
+  }
 
   onFileSelected(event: any) { this.selectedFile = event.target.files[0]; }
 
