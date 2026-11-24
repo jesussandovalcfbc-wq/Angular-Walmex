@@ -10123,6 +10123,7 @@ window.STORE_INFO = {
 };
 
 window.PRODUCT_INFO = {
+    "BQT GIRASOL 6T": ["WALMEX Bqt Girasol 6 st pk 10", 10],
     "BQT ROSAS 12T": ["DOCENA ROSAS 2 FILLERS", 8],
     "BQT ROSAS 6T": ["MEDIA DOCENA ROSAS 2 FILLERS", 10],
     "BQT MIXTO 12T": ["WALMEX Bqt Mixto 12 st pk 8", 8],
